@@ -27,9 +27,10 @@ LOGGER = logging.getLogger(__name__)
 
 # Naming template
 PREFIX = 'SPT3G'
-FITS_OUTNAME = "{outdir}/{prefix}J{ra}{dec}_{filter}.{ext}"
+FITS_OUTNAME = "{outdir}/{prefix}J{ra}{dec}_{filter}_{obsid}.{ext}"
 LOG_OUTNAME = "{outdir}/{prefix}J{ra}{dec}.{ext}"
 BASE_OUTNAME = "{prefix}J{ra}{dec}"
+BASEDIR_OUTNAME = "{outdir}/{prefix}J{ra}{dec}"
 
 
 def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
@@ -142,7 +143,7 @@ def update_wcs_matrix(header, x0, y0, naxis1, naxis2, ra, dec):
     # Get the astropy.wcs object
     wcs = WCS(h)
     # Recompute CRVAL1/2 on the new center x0,y0
-    CRVAL1, CRVAL2 = wcs.wcs_world2pix(x0, y0, 1)
+    CRVAL1, CRVAL2 = wcs.wcs_pix2world(x0, y0, 1)
     # Recast numpy objects as floats
     CRVAL1 = float(CRVAL1)
     CRVAL2 = float(CRVAL2)
@@ -154,8 +155,20 @@ def update_wcs_matrix(header, x0, y0, naxis1, naxis2, ra, dec):
     h['CRVAL2'] = CRVAL2
     h['CRPIX1'] = CRPIX1
     h['CRPIX2'] = CRPIX2
-    h['RA_CUTOUT'] = ra
-    h['DEC_CUTOUT'] = dec
+    h['CTYPE1'] = 'RA---TAN'
+    h['CTYPE2'] = 'DEC--TAN'
+
+    # Delete some key that are not needed
+    dkeys = ['PROJ', 'LONPOLE', 'LATPOLE', 'POLAR', 'ALPHA0', 'DELTA0', 'X0', 'Y0']
+    for k in dkeys:
+        h.delete(k)
+
+    # New record for RA/DEC center
+    recs = [{'name': 'racut', 'value': ra, 'comment': 'RA of cutout'},
+            {'name': 'deccut', 'value': dec, 'comment': 'DEC of cutout'}]
+    for rec in recs:
+        h.add_record(rec)
+
     return h
 
 
@@ -185,13 +198,22 @@ def check_inputs(ra, dec, xsize, ysize):
     return ra, dec, xsize, ysize
 
 
-def get_thumbFitsName(ra, dec, filter, prefix=PREFIX, ext='fits', outdir=os.getcwd()):
+def get_thumbFitsName(ra, dec, filter, obsid, prefix=PREFIX, ext='fits', outdir=os.getcwd()):
     """ Common function to set the Fits thumbnail name """
     ra = astrometry.dec2deg(ra/15., sep="", plussign=False)
     dec = astrometry.dec2deg(dec, sep="", plussign=True)
     kw = locals()
     outname = FITS_OUTNAME.format(**kw)
     return outname
+
+
+def get_thumbBaseDirName(ra, dec, prefix=PREFIX, outdir=os.getcwd()):
+    """ Common function to set the Fits thumbnail name """
+    ra = astrometry.dec2deg(ra/15., sep="", plussign=False)
+    dec = astrometry.dec2deg(dec, sep="", plussign=True)
+    kw = locals()
+    basedir = BASEDIR_OUTNAME.format(**kw)
+    return basedir
 
 
 def get_thumbLogName(ra, dec, prefix=PREFIX, ext='log', outdir=os.getcwd()):
@@ -288,6 +310,12 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
     else:
         raise Exception("ERROR: Cannot provide suitable BAND/FILTER from SCI header")
 
+    # Extract OBSID from the header
+    if 'OBS-ID' in header['SCI']:
+        obsid = str(header['SCI']['OBS-ID']).strip()
+    else:
+        raise Exception("ERROR: Cannot provide suitable OBS-ID from SCI header")
+
     # Intitialize the FITS object
     ifits = fitsio.FITS(filename, 'r')
 
@@ -343,8 +371,13 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
             # Update the WCS in the headers and make a copy
             h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x0, y0, naxis1, naxis2, ra[k], dec[k])
 
+        # Get the basedir
+        basedir = get_thumbBaseDirName(ra[k], dec[k], prefix=prefix, outdir=outdir)
+        if not os.path.exists(basedir):
+            os.makedirs(basedir)
+
         # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
-        outname = get_thumbFitsName(ra[k], dec[k], band, prefix=prefix, outdir=outdir)
+        outname = get_thumbFitsName(ra[k], dec[k], band, obsid, prefix=prefix, outdir=basedir)
 
         # Write out the file
         ofits = fitsio.FITS(outname, 'rw', clobber=clobber)
