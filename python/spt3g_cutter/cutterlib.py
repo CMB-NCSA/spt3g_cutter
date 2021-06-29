@@ -121,7 +121,7 @@ def get_fits_hdu_extensions_byfilename(filename):
     return sci_hdu
 
 
-def update_wcs_matrix(header, x0, y0, naxis1, naxis2, ra, dec):
+def update_wcs_matrix(header, x0, y0, naxis1, naxis2, ra, dec, proj='ZEA'):
     """
     Update the wcs header object with the right CRPIX[1, 2] CRVAL[1, 2] for a
     given subsection
@@ -155,13 +155,18 @@ def update_wcs_matrix(header, x0, y0, naxis1, naxis2, ra, dec):
     h['CRVAL2'] = CRVAL2
     h['CRPIX1'] = CRPIX1
     h['CRPIX2'] = CRPIX2
-    h['CTYPE1'] = 'RA---TAN'
-    h['CTYPE2'] = 'DEC--TAN'
 
-    # Delete some key that are not needed
-    dkeys = ['PROJ', 'LONPOLE', 'LATPOLE', 'POLAR', 'ALPHA0', 'DELTA0', 'X0', 'Y0']
-    for k in dkeys:
-        h.delete(k)
+    if proj == 'TAN':
+        h['CTYPE1'] = 'RA---TAN'
+        h['CTYPE2'] = 'DEC--TAN'
+        # Delete some key that are not needed
+        dkeys = ['PROJ', 'LONPOLE', 'LATPOLE', 'POLAR', 'ALPHA0', 'DELTA0', 'X0', 'Y0']
+        for k in dkeys:
+            h.delete(k)
+    elif proj == 'ZEA':
+        h['LATPOLE'] = CRVAL2
+    else:
+        raise NameError(f"Projection: {proj} not implemented")
 
     # New record for RA/DEC center
     recs = [{'name': 'racut', 'value': ra, 'comment': 'RA of cutout'},
