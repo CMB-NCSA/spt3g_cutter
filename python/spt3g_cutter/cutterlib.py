@@ -18,6 +18,7 @@ from astropy.utils.exceptions import AstropyWarning
 import logging
 from logging.handlers import RotatingFileHandler
 import warnings
+import multiprocessing
 
 # To avoid header warning from astropy
 warnings.filterwarnings('ignore', category=AstropyWarning, append=True)
@@ -267,14 +268,31 @@ def get_headers_hdus(filename):
     return header, hdu
 
 
+def get_NP(MP):
+
+    """ Get the number of processors in the machine
+    if MP == 0, use all available processor
+    """
+    # For it to be a integer
+    MP = int(MP)
+    if MP == 0:
+        NP = multiprocessing.cpu_count()
+    elif isinstance(MP, int):
+        NP = MP
+    else:
+        raise ValueError('MP is wrong type: %s, integer type' % MP)
+    return NP
+
+
 def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=PREFIX,
-               outdir=None, clobber=True, logger=None):
+               outdir=None, clobber=True, logger=None, counter=''):
 
     """
     Makes cutouts around ra, dec for a give xsize and ysize
     ra,dec can be scalars or lists/arrays
     """
 
+    t0 = time.time()
     if not logger:
         logger = LOGGER
 
@@ -284,7 +302,7 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
     # Check and fix inputs
     ra, dec, xsize, ysize = check_inputs(ra, dec, xsize, ysize)
 
-    logger.info(f"Working on FITS file: {filename}")
+    logger.info(f"Working on FITS file: {filename} -- {counter}")
     logger.info(f"Will cut: {len(ra)} stamps")
 
     # Check for the units
@@ -390,8 +408,9 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
             ofits.write(im_section[EXTNAME], extname=EXTNAME, header=h_section[EXTNAME])
 
         ofits.close()
-        logger.info(f"Wrote: {outname}")
+        logger.debug(f"Wrote: {outname}")
 
+    logger.info(f"Done {filename} in {elapsed_time(t0)} -- {counter}")
     return
 
 

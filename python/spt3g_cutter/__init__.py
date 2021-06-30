@@ -4,3 +4,4 @@ version = __version__
 
 from . import cutterlib
 from . import astrometry
+from . import fitsfinder
