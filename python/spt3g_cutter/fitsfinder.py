@@ -33,7 +33,7 @@ def check_xysize(df, xsize=None, ysize=None):
     return xsize, ysize
 
 
-def get_query(tablename, bands=None, date_start=None, date_end=None):
+def get_query(tablename, bands=None, date_start=None, date_end=None, yearly=None):
     """Format query template"""
 
     query_files_template = """
@@ -53,8 +53,10 @@ def get_query(tablename, bands=None, date_start=None, date_end=None):
     # Formatting dates
     if isinstance(date_start, str) and isinstance(date_end, str):
         and_dates = f"DATE_BEG between '{date_start}' and '{date_end}'"
+        if isinstance(yearly, str):
+            and_dates = f"{and_dates} or OBS_ID == '{yearly}'"
         if len(and_bands) > 1:
-            and_dates = "and " + and_dates
+            and_dates = f"and ({and_dates})"
     else:
         and_dates = ''
 

@@ -36,6 +36,8 @@ def cmdline():
                         help="The START date to search for files formatted [YYYY-MM-DD]")
     parser.add_argument("--date_end", type=str, action='store', default=None,
                         help="The END date to search for files formatted [YYYY-MM-DD]")
+    parser.add_argument("--yearly", type=str, action='store', default=None,
+                        help="The yearly tag or tags to use [i.e. yearly_winter_2020]")
 
     # Logging options (loglevel/log_format/log_format_date)
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
@@ -87,7 +89,8 @@ def run(args):
     query = fitsfinder.get_query(args.tablename,
                                  bands=args.bands,
                                  date_start=args.date_start,
-                                 date_end=args.date_end)
+                                 date_end=args.date_end,
+                                 yearly=args.yearly)
     logger.info(f"Running query: {query}")
     rec = fitsfinder.query2rec(query, dbhandle, verb=True)
 
