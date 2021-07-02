@@ -78,7 +78,7 @@ def connect_db(dbname):
     return con
 
 
-def query2rec(query, dbhandle, verb=False):
+def query2rec(query, dbhandle):
     """
     Queries DB and returns results as a numpy recarray.
     """
@@ -92,7 +92,6 @@ def query2rec(query, dbhandle, verb=False):
     if tuples:
         names = [d[0] for d in cur.description]
         return numpy.rec.array(tuples, names=names)
-
-    if verb:
-        print("# WARNING DB Query in query2rec() returned no results")
+    else:
+        logger.warning("# WARNING DB Query in query2rec() returned no results")
     return False
