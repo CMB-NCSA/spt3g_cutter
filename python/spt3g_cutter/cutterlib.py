@@ -115,11 +115,13 @@ def get_fits_hdu_extensions_byfilename(filename):
     """
     if os.path.basename(os.path.splitext(filename)[-1]) == '.fz':
         sci_hdu = 1
+        wgt_hdu = 2
     elif os.path.basename(os.path.splitext(filename)[-1]) == '.fits':
         sci_hdu = 0
+        wgt_hdu = 1
     else:
         raise NameError("ERROR: No .fz or .fits files found")
-    return sci_hdu
+    return sci_hdu, wgt_hdu
 
 
 def update_wcs_matrix(header, x0, y0, naxis1, naxis2, ra, dec, proj='ZEA'):
@@ -260,10 +262,12 @@ def get_headers_hdus(filename):
 
     # Case 2 -- older DESDM files without EXTNAME
     if len(header) < 1:
-        sci_hdu = get_fits_hdu_extensions_byfilename(filename)
+        sci_hdu, wgt_hdu = get_fits_hdu_extensions_byfilename(filename)
         fits = fitsio.FITS(filename)
         header['SCI'] = fits[sci_hdu].read_header()
+        header['WGT'] = fits[wgt_hdu].read_header()
         hdu['SCI'] = sci_hdu
+        hdu['WGT'] = wgt_hdu
 
     return header, hdu
 
@@ -317,7 +321,8 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
 
     # Get header/extensions/hdu
     header, hdunum = get_headers_hdus(filename)
-    extnames = header.keys()
+    extnames = header.keys()  # Gets SCI and WGT
+    logger.debug(f"Found EXTNAMES:{extnames}")
 
     # Get the pixel-scale of the input image
     pixelscale = astrometry.get_pixelscale(header['SCI'], units='arcsec')
