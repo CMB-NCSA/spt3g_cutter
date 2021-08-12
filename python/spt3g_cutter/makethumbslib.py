@@ -26,7 +26,7 @@ def cmdline():
     # DB options
     parser.add_argument("--dbname", type=str, action='store', default=None,
                         required=True, help="Database (file) to connect")
-    parser.add_argument("--tablename", type=str, action='store', default='file_info_v0',
+    parser.add_argument("--tablename", type=str, action='store', default='file_info_v1',
                         help="Name of tablw with file informatiom")
     parser.add_argument("--bands", nargs="*", default=['90GHz', '150GHz', '220GHz'],
                         help="The bands to select from: 90GHz, 150GHz and 220GHz")
