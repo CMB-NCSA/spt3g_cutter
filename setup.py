@@ -13,7 +13,7 @@ for edir in etc_dirs:
 
 # The main call
 setup(name='spt3g_cutter',
-      version='0.2.0',
+      version='0.2.1',
       license="GPL",
       description="Thumnail cutter for SPT3G",
       author="LSST, Felipe Menanteau",

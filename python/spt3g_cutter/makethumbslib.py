@@ -2,6 +2,7 @@ import argparse
 import logging
 import pandas
 import time
+from pyaml_env import parse_config
 import multiprocessing as mp
 import spt3g_cutter.fitsfinder as fitsfinder
 import spt3g_cutter.cutterlib as cutterlib
@@ -9,10 +10,23 @@ import spt3g_cutter.cutterlib as cutterlib
 
 def cmdline():
 
-    parser = argparse.ArgumentParser(description="spt3g thumbnail cutter tool")
+    # Make a proto-parse use to read in the default yaml configuration
+    # file, Turn off help, so we print all options in response to -h
+    conf_parser = argparse.ArgumentParser(add_help=False)
+    conf_parser.add_argument("-c", "--configfile", help="SPT3G config file")
+    args, remaining_argv = conf_parser.parse_known_args()
+    # If we have -c or --config, then we proceed to read it
+    if args.configfile:
+        conf_defaults = parse_config(args.configfile)
+    else:
+        conf_defaults = {}
 
+    # 2. This is the main parser
+    parser = argparse.ArgumentParser(description="SPT3G thumbnail cutter tool",
+                                     # Inherit options from config_parser
+                                     parents=[conf_parser])
     # Location (RA,DEC, XSIZE, YSIZE)
-    parser.add_argument("inputList",
+    parser.add_argument("--inputList",
                         help="Input CSV file with positions (RA,DEC) and optional (XSIZE,YSIZE) in arcmins")
     parser.add_argument("--xsize", type=float, action="store", default=None,
                         help="Length of x-side in arcmins of image [default = 10]")
@@ -20,12 +34,12 @@ def cmdline():
                         help="Length of y-side of in arcmins image [default = 10]")
     # File location
     parser.add_argument("--outdir", type=str, action='store', default=None,
-                        required=True, help="Location for output files")
+                        help="Location for output files")
     parser.add_argument("--prefix", type=str, action='store', default='spt3g',
                         help="Prefix for thumbnail filenames [default='spt3g']")
     # DB options
     parser.add_argument("--dbname", type=str, action='store', default=None,
-                        required=True, help="Database (file) to connect")
+                        help="Database (file) to connect")
     parser.add_argument("--tablename", type=str, action='store', default='file_info_v1',
                         help="Name of tablw with file informatiom")
     parser.add_argument("--bands", nargs="*", default=['90GHz', '150GHz', '220GHz'],
@@ -52,7 +66,13 @@ def cmdline():
     parser.add_argument("--np", action="store", default=1, type=int,
                         help="Run using multi-process, 0=automatic, 1=single-process [default]")
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
+    # Set the defaults of argparse using the values in the yaml config file
+    parser.set_defaults(**conf_defaults)
+    args = parser.parse_args(args=remaining_argv)
+    args.loglevel = getattr(logging, args.loglevel)
+
+    print(args)
 
     # Make sure that both date_start/end are defined or both are None
     if args.date_start is None and args.date_end is None:

@@ -1,0 +1,17 @@
+# Configuration example for SPT3G cutter
+inputList: !ENV ${CONDA_PREFIX}/spt3g_cutter/etc/spt3g-example-list.csv
+xsize: 10
+ysize: 10
+# DB
+dbname: /data/spt3g/dblib/spt3g.db
+tablename: file_info_v1
+outdir: !ENV $JOB_OUTPUT_DIR
+# Date range and bands
+date_start: "2021-04-01"
+date_end: "2021-06-30"
+bands: [90GHz, 150GHz, 220GHz]
+yearly: yearly_winter_2020
+# Logging:
+loglevel: INFO
+# Number of cores to use
+np: 8
