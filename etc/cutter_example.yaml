@@ -7,7 +7,7 @@ dbname: /data/spt3g/dblib/spt3g.db
 tablename: file_info_v1
 outdir: !ENV $JOB_OUTPUT_DIR
 # Date range and bands
-date_start: "2021-04-01"
+date_start: "2021-06-25"
 date_end: "2021-06-30"
 bands: [90GHz, 150GHz, 220GHz]
 yearly: yearly_winter_2020

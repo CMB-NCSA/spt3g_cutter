@@ -19,6 +19,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import warnings
 import multiprocessing
+import yaml
 
 # To avoid header warning from astropy
 warnings.filterwarnings('ignore', category=AstropyWarning, append=True)
@@ -288,7 +289,7 @@ def get_NP(MP):
     return NP
 
 
-def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=PREFIX,
+def fitscutter(filename, ra, dec, cutout_names, xsize=1.0, ysize=1.0, units='arcmin', prefix=PREFIX,
                outdir=None, clobber=True, logger=None, counter=''):
 
     """
@@ -346,6 +347,10 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
 
     # Intitialize the FITS object
     ifits = fitsio.FITS(filename, 'r')
+
+    if cutout_names is None:
+        cutout_names = {}
+    outnames = []
 
     ######################################
     # Loop over ra/dec and xsize,ysize
@@ -406,7 +411,7 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
 
         # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
         outname = get_thumbFitsName(ra[k], dec[k], band, obsid, prefix=prefix, outdir=basedir)
-
+        outnames.append(outname)
         # Write out the file
         ofits = fitsio.FITS(outname, 'rw', clobber=clobber)
         for EXTNAME in extnames:
@@ -416,7 +421,25 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
         logger.debug(f"Wrote: {outname}")
 
     logger.info(f"Done {filename} in {elapsed_time(t0)} -- {counter}")
-    return
+    cutout_names[filename] = outnames
+    return cutout_names
+
+
+def write_manifest(args):
+    """Write YAML file with files created and input options"""
+
+    ordered = ['bands', 'date_start', 'date_end', 'tablename', 'dbname', 'np', 'outdir',
+               'inputList', 'yearly', 'files', 'cutout_files']
+    manifest = {}
+
+    d = args.__dict__
+    for key in ordered:
+        manifest[key] = d[key]
+
+    yaml_file = os.path.join(args.outdir, 'manifest.yaml')
+    with open(yaml_file, 'w') as manifest_file:
+        yaml.dump(manifest, manifest_file, sort_keys=False, default_flow_style=False)
+    LOGGER.info(f"Wrote manifest file to: {yaml_file}")
 
 
 if __name__ == "__main__":
