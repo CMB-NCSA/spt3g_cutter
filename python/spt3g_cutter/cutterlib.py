@@ -8,6 +8,7 @@ Based on desthumbs code circa 2015
 import fitsio
 import os
 import sys
+import spt3g_cutter
 import spt3g_cutter.astrometry as astrometry
 import time
 import numpy
@@ -19,6 +20,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 import warnings
 import multiprocessing
+import yaml
+import datetime
+import subprocess
 
 # To avoid header warning from astropy
 warnings.filterwarnings('ignore', category=AstropyWarning, append=True)
@@ -288,7 +292,7 @@ def get_NP(MP):
     return NP
 
 
-def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=PREFIX,
+def fitscutter(filename, ra, dec, cutout_names, xsize=1.0, ysize=1.0, units='arcmin', prefix=PREFIX,
                outdir=None, clobber=True, logger=None, counter=''):
 
     """
@@ -346,6 +350,10 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
 
     # Intitialize the FITS object
     ifits = fitsio.FITS(filename, 'r')
+
+    if cutout_names is None:
+        cutout_names = {}
+    outnames = []
 
     ######################################
     # Loop over ra/dec and xsize,ysize
@@ -406,7 +414,8 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
 
         # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
         outname = get_thumbFitsName(ra[k], dec[k], band, obsid, prefix=prefix, outdir=basedir)
-
+        # Save the outnames without the output directory
+        outnames.append(outname.replace(f"{outdir}/", ''))
         # Write out the file
         ofits = fitsio.FITS(outname, 'rw', clobber=clobber)
         for EXTNAME in extnames:
@@ -416,7 +425,78 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin', prefix=P
         logger.debug(f"Wrote: {outname}")
 
     logger.info(f"Done {filename} in {elapsed_time(t0)} -- {counter}")
-    return
+    cutout_names[filename] = outnames
+    return cutout_names
+
+
+def get_id_names(ra, dec, prefix):
+    "Get the ID names associated with every position"
+    names = []
+    for k in range(len(ra)):
+        names.append(get_thumbBaseName(ra[k], dec[k], prefix=prefix))
+    return names
+
+
+def get_size_on_disk(outdir):
+    size = subprocess.check_output(['du', '-sh', outdir]).split()[0].decode('ascii')
+    return size
+
+
+def get_job_info(args):
+
+    """Get the JOB_ID and JOB_OUTPUT_DIR from the environment"""
+
+    JOB_ID = None
+    JOB_OUTPUT_DIR = None
+    if 'JOB_ID' in os.environ:
+        JOB_ID = os.environ['JOB_ID']
+    if 'JOB_OUTPUT_DIR' in os.environ:
+        JOB_OUTPUT_DIR = os.environ['JOB_OUTPUT_DIR']
+    return JOB_ID, JOB_OUTPUT_DIR
+
+
+def capture_job_metadata(args):
+    """ Get more information abot this job for the manifest"""
+
+    # Get the ID names for each ra,dec pair and store them
+    args.id_names = get_id_names(args.ra, args.dec, args.prefix)
+    # Make a list of all of the cutout cutout_names
+    cutout_files = []
+    for file in args.cutout_names.keys():
+        cutout_files.extend(args.cutout_names[file])
+    args.cutout_files = cutout_files
+
+    # Get the size on disk
+    args.size_on_disk = get_size_on_disk(args.outdir)
+    args.files_on_disk = len(args.cutout_files)
+
+    # Get the job information from k8s
+    (args.JOB_ID, args.JOB_OUTPUT_DIR) = get_job_info(args)
+    return args
+
+
+def write_manifest(args):
+
+    """Write YAML file with files created and input options"""
+
+    ordered = ['bands', 'date_start', 'date_end', 'tablename', 'dbname', 'np', 'outdir',
+               'inputList', 'yearly', 'files', 'id_names', 'size_on_disk',
+               'JOB_ID', 'JOB_OUTPUT_DIR', 'files_on_disk', 'cutout_files']
+    manifest = {}
+
+    d = args.__dict__
+    for key in ordered:
+        manifest[key] = d[key]
+
+    d = datetime.datetime.today()
+    date = d.isoformat('T', 'seconds')
+    comment = f"# Manifest file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
+
+    yaml_file = os.path.join(args.outdir, 'manifest.yaml')
+    with open(yaml_file, 'w') as manifest_file:
+        manifest_file.write(comment)
+        yaml.dump(manifest, manifest_file, sort_keys=False, default_flow_style=False)
+    LOGGER.info(f"Wrote manifest file to: {yaml_file}")
 
 
 if __name__ == "__main__":

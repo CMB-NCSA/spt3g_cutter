@@ -99,8 +99,8 @@ def run(args):
 
     # Get the arrays with ra, dec, xsize, ysize
     (xsize, ysize) = fitsfinder.check_xysize(df, xsize=args.xsize, ysize=args.ysize)
-    ra = df.RA.values
-    dec = df.DEC.values
+    args.ra = df.RA.values
+    args.dec = df.DEC.values
 
     # Connect, get query and run query
     dbhandle = fitsfinder.connect_db(args.dbname)
@@ -112,30 +112,48 @@ def run(args):
     logger.info(f"Running query: {query}")
     rec = fitsfinder.query2rec(query, dbhandle)
 
+    cutout_names = {}
+
     # Get the number of processors to use
     NP = cutterlib.get_NP(args.np)
     if NP > 1:
         p = mp.Pool(processes=NP)
         logger.info(f"Will use {NP} processors to convert and ingest")
+        manager = mp.Manager()
+        return_dict = manager.dict()
+    else:
+        return_dict = None
 
     # Loop over all files
-    Nfiles = len(rec['FILE'])
+    args.files = rec['FILE'].tolist()
+    Nfiles = len(args.files)
     logger.info(f"Found {Nfiles} files")
     k = 1
     t0 = time.time()
-    for file in rec['FILE']:
+    for file in args.files:
         counter = f"{k}/{Nfiles} files"
-        ar = (file, ra, dec)
+        ar = (file, args.ra, args.dec, return_dict)
         kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin',
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter}
         if NP > 1:
-            p.apply_async(cutterlib.fitscutter, ar, kw)
+            p.apply_async(cutterlib.fitscutter, args=ar, kwds=kw)
         else:
-            cutterlib.fitscutter(*ar, **kw)
+            res = cutterlib.fitscutter(*ar, **kw)
+            cutout_names.update(res)
         k += 1
 
     if NP > 1:
         p.close()
         p.join()
+        # Update with returned dictionary
+        cutout_names = dict(return_dict)
+
+    # Store the dict with all of the cutout names
+    args.cutout_names = cutout_names
+
+    args = cutterlib.capture_job_metadata(args)
+
+    # Write the manifest yaml file
+    cutterlib.write_manifest(args)
 
     logger.info(f"Grand Total time: {cutterlib.elapsed_time(t0)}")
