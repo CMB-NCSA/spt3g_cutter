@@ -99,8 +99,8 @@ def run(args):
 
     # Get the arrays with ra, dec, xsize, ysize
     (xsize, ysize) = fitsfinder.check_xysize(df, xsize=args.xsize, ysize=args.ysize)
-    ra = df.RA.values
-    dec = df.DEC.values
+    args.ra = df.RA.values
+    args.dec = df.DEC.values
 
     # Connect, get query and run query
     dbhandle = fitsfinder.connect_db(args.dbname)
@@ -132,7 +132,7 @@ def run(args):
     t0 = time.time()
     for file in args.files:
         counter = f"{k}/{Nfiles} files"
-        ar = (file, ra, dec, return_dict)
+        ar = (file, args.ra, args.dec, return_dict)
         kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin',
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter}
         if NP > 1:
@@ -150,11 +150,10 @@ def run(args):
 
     # Store the dict with all of the cutout names
     args.cutout_names = cutout_names
-    # Make a list of all of the cutout cutout_names
-    cutout_files = []
-    for file in args.cutout_names.keys():
-        cutout_files.extend(args.cutout_names[file])
-    args.cutout_files = cutout_files
+
+    args = cutterlib.capture_job_metadata(args)
+
+    # Write the manifest yaml file
     cutterlib.write_manifest(args)
 
     logger.info(f"Grand Total time: {cutterlib.elapsed_time(t0)}")
