@@ -44,6 +44,8 @@ def cmdline():
                         help="Name of tablw with file informatiom")
     parser.add_argument("--bands", nargs="*", default=['90GHz', '150GHz', '220GHz'],
                         help="The bands to select from: 90GHz, 150GHz and 220GHz")
+    parser.add_argument("--filetypes", nargs="*", default=['raw', 'filtered'],
+                        help="The filetype to select: 'raw/filtered'")
     parser.add_argument("--date_start", type=str, action='store', default=None,
                         help="The START date to search for files formatted [YYYY-MM-DD]")
     parser.add_argument("--date_end", type=str, action='store', default=None,
@@ -106,6 +108,7 @@ def run(args):
     dbhandle = fitsfinder.connect_db(args.dbname)
     query = fitsfinder.get_query(args.tablename,
                                  bands=args.bands,
+                                 filetypes=args.filetypes,
                                  date_start=args.date_start,
                                  date_end=args.date_end,
                                  yearly=args.yearly)
