@@ -33,7 +33,7 @@ def check_xysize(df, xsize=None, ysize=None):
     return xsize, ysize
 
 
-def get_query(tablename, bands=None, date_start=None, date_end=None, yearly=None):
+def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=None, yearly=None):
     """Format query template"""
 
     query_files_template = """
@@ -41,6 +41,7 @@ def get_query(tablename, bands=None, date_start=None, date_end=None, yearly=None
       {where}
        {and_bands}
        {and_dates}
+       {and_filetypes}
     """
 
     # Formatting bands
@@ -50,23 +51,35 @@ def get_query(tablename, bands=None, date_start=None, date_end=None, yearly=None
     else:
         and_bands = ''
 
+    # Formatting filetypes
+    if filetypes:
+        in_filetypes = ','.join("\'{}\'".format(s) for s in filetypes)
+        and_filetypes = f"FILETYPE in ({in_filetypes})"
+        if bands is not None:
+            and_filetypes = f"and ({and_filetypes})"
+    else:
+        and_filetypes = ''
+
     # Formatting dates
     if isinstance(date_start, str) and isinstance(date_end, str):
         and_dates = f"DATE_BEG between '{date_start}' and '{date_end}'"
         if isinstance(yearly, str):
             and_dates = f"{and_dates} or OBS_ID == '{yearly}'"
-        if len(and_bands) > 1:
+        if bands is not None or filetypes is not None:
             and_dates = f"and ({and_dates})"
     else:
         and_dates = ''
 
     # Adding a where if needed
-    if and_dates or and_bands:
+    if and_dates or and_bands or and_filetypes:
         where = 'where'
     else:
         where = ''
 
-    kw = {where: 'where', 'tablename': tablename, 'and_bands': and_bands, 'and_dates': and_dates}
+    kw = {where: 'where', 'tablename': tablename,
+          'and_bands': and_bands,
+          'and_filetypes': and_filetypes,
+          'and_dates': and_dates}
     return query_files_template.format(**kw)
 
 
