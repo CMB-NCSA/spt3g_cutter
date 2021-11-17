@@ -266,12 +266,16 @@ def get_headers_hdus(filename):
 
     # Case 2 -- older DESDM files without EXTNAME
     if len(header) < 1:
+        LOGGER.debug("Getting EXTNAME by file")
         sci_hdu, wgt_hdu = get_fits_hdu_extensions_byfilename(filename)
         fits = fitsio.FITS(filename)
         header['SCI'] = fits[sci_hdu].read_header()
-        header['WGT'] = fits[wgt_hdu].read_header()
         hdu['SCI'] = sci_hdu
-        hdu['WGT'] = wgt_hdu
+        try:
+            header['WGT'] = fits[wgt_hdu].read_header()
+            hdu['WGT'] = wgt_hdu
+        except IOError:
+            LOGGER.warning("No WGT HDU found for")
 
     return header, hdu
 

@@ -63,8 +63,9 @@ def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=N
     # Formatting dates
     if isinstance(date_start, str) and isinstance(date_end, str):
         and_dates = f"DATE_BEG between '{date_start}' and '{date_end}'"
-        if isinstance(yearly, str):
-            and_dates = f"{and_dates} or OBS_ID == '{yearly}'"
+        if yearly is not None:
+            in_yearly = ','.join("\'{}\'".format(s) for s in yearly)
+            and_dates = f"{and_dates} or OBS_ID in ({in_yearly})"
         if bands is not None or filetypes is not None:
             and_dates = f"and ({and_dates})"
     else:
@@ -106,5 +107,5 @@ def query2rec(query, dbhandle):
         names = [d[0] for d in cur.description]
         return numpy.rec.array(tuples, names=names)
     else:
-        logger.warning("# WARNING DB Query in query2rec() returned no results")
+        logger.warning("# Warning: DB Query in query2rec() returned no results")
     return False
