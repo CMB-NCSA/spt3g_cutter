@@ -275,7 +275,7 @@ def get_headers_hdus(filename):
             header['WGT'] = fits[wgt_hdu].read_header()
             hdu['WGT'] = wgt_hdu
         except IOError:
-            LOGGER.warning("No WGT HDU found for")
+            LOGGER.warning(f"No WGT HDU for: {filename}")
 
     return header, hdu
 
@@ -368,6 +368,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
     # Loop over ra/dec and xsize,ysize
     for k in range(len(ra)):
 
+        # The basename for the (ra,dec)
+        objID = get_thumbBaseName(ra[k], dec[k], prefix=prefix)
+
         # Define the geometry of the thumbnail
         x0, y0 = wcs.wcs_world2pix(ra[k], dec[k], 1)
         yL = 10000
@@ -386,7 +389,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         # Make sure the (x0,y0) is contained within the image
         if x0 < 0 or y0 < 0:
             LOGGER.warning(f"(RA,DEC):{ra[k]},{dec[k]} outside {filename}")
-            rejected.append(f"{ra[k]},{dec[k]}")
+            rejected.append(f"{ra[k]}, {dec[k]}, {objID}")
             continue
 
         # Make sure we are not going beyond the limits
@@ -432,7 +435,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         # Get the basedir
         basedir = get_thumbBaseDirName(ra[k], dec[k], prefix=prefix, outdir=outdir)
         if not os.path.exists(basedir):
-            os.makedirs(basedir)
+            os.makedirs(basedir, mode=0o755, exist_ok=True)
 
         # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
         outname = get_thumbFitsName(ra[k], dec[k], band, obsid, prefix=prefix, outdir=basedir)
@@ -481,11 +484,22 @@ def get_job_info(args):
     return JOB_ID, JOB_OUTPUT_DIR
 
 
+def get_positions_idnames(args):
+    positions_idnames = []
+    for k in range(len(args.ra)):
+        positions_idnames.append(f"{args.ra[k]}, {args.dec[k]}, {args.id_names[k]}")
+    return positions_idnames
+
+
 def capture_job_metadata(args):
     """ Get more information abot this job for the manifest"""
 
     # Get the ID names for each ra,dec pair and store them
     args.id_names = get_id_names(args.ra, args.dec, args.prefix)
+
+    # Get the positions and id_names
+    args.input_positions = get_positions_idnames(args)
+
     # Make a list of all of the cutout cutout_names
     cutout_files = []
     for file in args.cutout_names.keys():
@@ -507,7 +521,8 @@ def write_manifest(args):
 
     ordered = ['bands', 'date_start', 'date_end', 'tablename', 'dbname', 'np', 'outdir',
                'inputList', 'yearly', 'files', 'id_names', 'size_on_disk',
-               'JOB_ID', 'JOB_OUTPUT_DIR', 'files_on_disk', 'cutout_files', 'rejected_positions']
+               'JOB_ID', 'JOB_OUTPUT_DIR', 'files_on_disk', 'cutout_files',
+               'rejected_positions', 'input_positions']
     manifest = {}
 
     d = args.__dict__
