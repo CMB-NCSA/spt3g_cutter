@@ -2,6 +2,7 @@ import argparse
 import logging
 import pandas
 import time
+import sys
 from pyaml_env import parse_config
 import multiprocessing as mp
 import spt3g_cutter
@@ -98,6 +99,7 @@ def run(args):
                             log_format_date=args.log_format_date)
     logger = logging.getLogger(__name__)
 
+    logger.info(f"Received command call:\n{' '.join(sys.argv[0:-1])}")
     logger.info(f"Running spt3g_cutter:{spt3g_cutter.__version__}")
     logger.info(f"Running with args: \n{args}")
 
@@ -107,8 +109,8 @@ def run(args):
 
     # Get the arrays with ra, dec, xsize, ysize
     (xsize, ysize) = fitsfinder.check_xysize(df, xsize=args.xsize, ysize=args.ysize)
-    args.ra = df.RA.values
-    args.dec = df.DEC.values
+    args.ra = df.RA.values.tolist()
+    args.dec = df.DEC.values.tolist()
 
     # Connect, get query and run query
     dbhandle = fitsfinder.connect_db(args.dbname)
@@ -130,10 +132,11 @@ def run(args):
     NP = cutterlib.get_NP(args.np)
     if NP > 1:
         p = mp.Pool(processes=NP)
-        logger.info(f"Will use {NP} processors to convert and ingest")
+        logger.info(f"Will use {NP} processors for process")
         manager = mp.Manager()
         cutout_dict = manager.dict()
         rejected_dict = manager.dict()
+        results = []
     else:
         cutout_dict = None
         rejected_dict = None
@@ -150,7 +153,9 @@ def run(args):
         kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin',
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter}
         if NP > 1:
-            p.apply_async(cutterlib.fitscutter, args=ar, kwds=kw)
+            # Get result to catch exceptions later, after close()
+            s = p.apply_async(cutterlib.fitscutter, args=ar, kwds=kw)
+            results.append(s)
         else:
             names, pos = cutterlib.fitscutter(*ar, **kw)
             cutout_names.update(names)
@@ -158,7 +163,11 @@ def run(args):
 
     if NP > 1:
         p.close()
+        # Check for exceptions
+        for r in results:
+            r.get()
         p.join()
+
         # Update with returned dictionary
         cutout_names = dict(cutout_dict)
         rejected_pos = dict(rejected_dict)
