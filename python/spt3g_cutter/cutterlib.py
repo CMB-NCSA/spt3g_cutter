@@ -296,8 +296,9 @@ def get_NP(MP):
     return NP
 
 
-def fitscutter(filename, ra, dec, cutout_names, xsize=1.0, ysize=1.0, units='arcmin', prefix=PREFIX,
-               outdir=None, clobber=True, logger=None, counter=''):
+def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
+               xsize=1.0, ysize=1.0, units='arcmin',
+               prefix=PREFIX, outdir=None, clobber=True, logger=None, counter=''):
 
     """
     Makes cutouts around ra, dec for a give xsize and ysize
@@ -357,7 +358,11 @@ def fitscutter(filename, ra, dec, cutout_names, xsize=1.0, ysize=1.0, units='arc
 
     if cutout_names is None:
         cutout_names = {}
+    if rejected_positions is None:
+        rejected_positions = {}
+
     outnames = []
+    rejected = []
 
     ######################################
     # Loop over ra/dec and xsize,ysize
@@ -378,10 +383,19 @@ def fitscutter(filename, ra, dec, cutout_names, xsize=1.0, ysize=1.0, units='arc
         x1 = x0-dx
         x2 = x0+dx
 
+        # Make sure the (x0,y0) is contained within the image
+        if x0 < 0 or y0 < 0:
+            LOGGER.warning(f"(RA,DEC):{ra[k]},{dec[k]} outside {filename}")
+            rejected.append(f"{ra[k]},{dec[k]}")
+            continue
+
+        # Make sure we are not going beyond the limits
+        # if negative set it to zero
         if y1 < 0:
             y1 = 0
             dy = y0
             y2 = y0 + dy
+
         if y2 > yL:
             y2 = yL
             dy = yL - y0
@@ -398,6 +412,10 @@ def fitscutter(filename, ra, dec, cutout_names, xsize=1.0, ysize=1.0, units='arc
 
         im_section = OrderedDict()
         h_section = OrderedDict()
+        LOGGER.debug(f"Found naxis1,naxis2: {naxis1},{naxis2}")
+        LOGGER.debug(f"Found x1,x2: {x1},{x2}")
+        LOGGER.debug(f"Found y1,y2: {y1},{y2}")
+
         for EXTNAME in extnames:
             # The hdunum for that extname
             HDUNUM = hdunum[EXTNAME]
@@ -430,7 +448,11 @@ def fitscutter(filename, ra, dec, cutout_names, xsize=1.0, ysize=1.0, units='arc
 
     logger.info(f"Done {filename} in {elapsed_time(t0)} -- {counter}")
     cutout_names[filename] = outnames
-    return cutout_names
+
+    if len(rejected) > 0:
+        rejected_positions[filename] = rejected
+
+    return cutout_names, rejected_positions
 
 
 def get_id_names(ra, dec, prefix):
@@ -485,7 +507,7 @@ def write_manifest(args):
 
     ordered = ['bands', 'date_start', 'date_end', 'tablename', 'dbname', 'np', 'outdir',
                'inputList', 'yearly', 'files', 'id_names', 'size_on_disk',
-               'JOB_ID', 'JOB_OUTPUT_DIR', 'files_on_disk', 'cutout_files']
+               'JOB_ID', 'JOB_OUTPUT_DIR', 'files_on_disk', 'cutout_files', 'rejected_positions']
     manifest = {}
 
     d = args.__dict__
