@@ -4,6 +4,7 @@ import pandas
 import time
 from pyaml_env import parse_config
 import multiprocessing as mp
+import spt3g_cutter
 import spt3g_cutter.fitsfinder as fitsfinder
 import spt3g_cutter.cutterlib as cutterlib
 
@@ -74,7 +75,9 @@ def cmdline():
     args = parser.parse_args(args=remaining_argv)
     args.loglevel = getattr(logging, args.loglevel)
 
-    print(args)
+    # In case we pass and yearly tags
+    if len(args.yearly) == 0:
+        args.yearly = None
 
     # Make sure that both date_start/end are defined or both are None
     if args.date_start is None and args.date_end is None:
@@ -94,6 +97,9 @@ def run(args):
                             log_format=args.log_format,
                             log_format_date=args.log_format_date)
     logger = logging.getLogger(__name__)
+
+    logger.info(f"Running spt3g_cutter:{spt3g_cutter.__version__}")
+    logger.info(f"Running with args: \n{args}")
 
     # Read in CSV file with pandas
     logger.info(f"Reading: {args.inputList}")
@@ -118,6 +124,7 @@ def run(args):
         raise RuntimeError(f"Error with query:{query}")
 
     cutout_names = {}
+    rejected_pos = {}
 
     # Get the number of processors to use
     NP = cutterlib.get_NP(args.np)
@@ -125,9 +132,11 @@ def run(args):
         p = mp.Pool(processes=NP)
         logger.info(f"Will use {NP} processors to convert and ingest")
         manager = mp.Manager()
-        return_dict = manager.dict()
+        cutout_dict = manager.dict()
+        rejected_dict = manager.dict()
     else:
-        return_dict = None
+        cutout_dict = None
+        rejected_dict = None
 
     # Loop over all files
     args.files = rec['FILE'].tolist()
@@ -137,24 +146,26 @@ def run(args):
     t0 = time.time()
     for file in args.files:
         counter = f"{k}/{Nfiles} files"
-        ar = (file, args.ra, args.dec, return_dict)
+        ar = (file, args.ra, args.dec, cutout_dict, rejected_dict)
         kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin',
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter}
         if NP > 1:
             p.apply_async(cutterlib.fitscutter, args=ar, kwds=kw)
         else:
-            res = cutterlib.fitscutter(*ar, **kw)
-            cutout_names.update(res)
+            names, pos = cutterlib.fitscutter(*ar, **kw)
+            cutout_names.update(names)
         k += 1
 
     if NP > 1:
         p.close()
         p.join()
         # Update with returned dictionary
-        cutout_names = dict(return_dict)
+        cutout_names = dict(cutout_dict)
+        rejected_pos = dict(rejected_dict)
 
-    # Store the dict with all of the cutout names
+    # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
+    args.rejected_positions = rejected_pos
 
     args = cutterlib.capture_job_metadata(args)
 
