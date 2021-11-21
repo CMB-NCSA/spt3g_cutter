@@ -33,10 +33,11 @@ LOGGER = logging.getLogger(__name__)
 
 # Naming template
 PREFIX = 'SPT3G'
-FITS_OUTNAME = "{outdir}/{prefix}J{ra}{dec}_{filter}_{obsid}_{filetype}.{ext}"
+FITS_OUTNAME = "{outdir}/{prefix}J{ra}{dec}_{filter}_{obsid}_{filetype_ext}.{ext}"
 LOG_OUTNAME = "{outdir}/{prefix}J{ra}{dec}.{ext}"
 BASE_OUTNAME = "{prefix}J{ra}{dec}"
 BASEDIR_OUTNAME = "{outdir}/{prefix}J{ra}{dec}"
+FILETYPE_EXT = {'raw': 'raw', 'filtered': 'flt'}
 
 
 def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
@@ -211,7 +212,7 @@ def check_inputs(ra, dec, xsize, ysize):
     return ra, dec, xsize, ysize
 
 
-def get_thumbFitsName(ra, dec, filter, obsid, filetype, prefix=PREFIX, ext='fits', outdir=os.getcwd()):
+def get_thumbFitsName(ra, dec, filter, obsid, filetype_ext, prefix=PREFIX, ext='fits', outdir=os.getcwd()):
     """ Common function to set the Fits thumbnail name """
     ra = astrometry.dec2deg(ra/15., sep="", plussign=False)
     dec = astrometry.dec2deg(dec, sep="", plussign=True)
@@ -360,14 +361,13 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
     elif re.search('_raw.fits', filename):
         filetype = 'raw'
     elif re.search('_flt.fits', filename):
-        filetype = 'flt'
+        filetype = 'filtered'
     else:
         # Try to get it from the filename
         raise Exception("ERROR: Cannot provide suitable FILETYPE from SCI header")
 
     # Shorten filetype=filtered to flt -- temporary fix
-    if filetype == 'filtered':
-        filetype = 'flt'
+    filetype_ext = FILETYPE_EXT[filetype]
 
     # Intitialize the FITS object
     ifits = fitsio.FITS(filename, 'r')
@@ -454,7 +454,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
             os.makedirs(basedir, mode=0o755, exist_ok=True)
 
         # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
-        outname = get_thumbFitsName(ra[k], dec[k], band, obsid, filetype, prefix=prefix, outdir=basedir)
+        outname = get_thumbFitsName(ra[k], dec[k], band, obsid, filetype_ext, prefix=prefix, outdir=basedir)
         # Save the outnames without the output directory
         outnames.append(outname.replace(f"{outdir}/", ''))
         # Write out the file
