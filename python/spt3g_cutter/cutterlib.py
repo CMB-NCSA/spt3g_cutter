@@ -23,6 +23,7 @@ import multiprocessing
 import yaml
 import datetime
 import subprocess
+import re
 
 # To avoid header warning from astropy
 warnings.filterwarnings('ignore', category=AstropyWarning, append=True)
@@ -32,7 +33,7 @@ LOGGER = logging.getLogger(__name__)
 
 # Naming template
 PREFIX = 'SPT3G'
-FITS_OUTNAME = "{outdir}/{prefix}J{ra}{dec}_{filter}_{obsid}.{ext}"
+FITS_OUTNAME = "{outdir}/{prefix}J{ra}{dec}_{filter}_{obsid}_{filetype}.{ext}"
 LOG_OUTNAME = "{outdir}/{prefix}J{ra}{dec}.{ext}"
 BASE_OUTNAME = "{prefix}J{ra}{dec}"
 BASEDIR_OUTNAME = "{outdir}/{prefix}J{ra}{dec}"
@@ -210,7 +211,7 @@ def check_inputs(ra, dec, xsize, ysize):
     return ra, dec, xsize, ysize
 
 
-def get_thumbFitsName(ra, dec, filter, obsid, prefix=PREFIX, ext='fits', outdir=os.getcwd()):
+def get_thumbFitsName(ra, dec, filter, obsid, filetype, prefix=PREFIX, ext='fits', outdir=os.getcwd()):
     """ Common function to set the Fits thumbnail name """
     ra = astrometry.dec2deg(ra/15., sep="", plussign=False)
     dec = astrometry.dec2deg(dec, sep="", plussign=True)
@@ -353,6 +354,21 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
     else:
         raise Exception("ERROR: Cannot provide suitable OBS-ID from SCI header")
 
+    # Extract FILETYPE from the header
+    if 'FILETYPE' in header['SCI']:
+        filetype = str(header['SCI']['FILETYPE']).strip()
+    elif re.search('_raw.fits', filename):
+        filetype = 'raw'
+    elif re.search('_flt.fits', filename):
+        filetype = 'flt'
+    else:
+        # Try to get it from the filename
+        raise Exception("ERROR: Cannot provide suitable FILETYPE from SCI header")
+
+    # Shorten filetype=filtered to flt -- temporary fix
+    if filetype == 'filtered':
+        filetype = 'flt'
+
     # Intitialize the FITS object
     ifits = fitsio.FITS(filename, 'r')
 
@@ -438,7 +454,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
             os.makedirs(basedir, mode=0o755, exist_ok=True)
 
         # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
-        outname = get_thumbFitsName(ra[k], dec[k], band, obsid, prefix=prefix, outdir=basedir)
+        outname = get_thumbFitsName(ra[k], dec[k], band, obsid, filetype, prefix=prefix, outdir=basedir)
         # Save the outnames without the output directory
         outnames.append(outname.replace(f"{outdir}/", ''))
         # Write out the file
