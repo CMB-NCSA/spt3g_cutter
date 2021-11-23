@@ -33,10 +33,11 @@ LOGGER = logging.getLogger(__name__)
 
 # Naming template
 PREFIX = 'SPT3G'
-FITS_OUTNAME = "{outdir}/{prefix}J{ra}{dec}_{filter}_{obsid}_{filetype_ext}.{ext}"
-LOG_OUTNAME = "{outdir}/{prefix}J{ra}{dec}.{ext}"
-BASE_OUTNAME = "{prefix}J{ra}{dec}"
-BASEDIR_OUTNAME = "{outdir}/{prefix}J{ra}{dec}"
+OBJ_ID = "{prefix}J{ra}{dec}"
+FITS_OUTNAME = "{outdir}/{objID}_{filter}_{obsid}_{filetype_ext}.{ext}"
+LOG_OUTNAME = "{outdir}/{objID}.{ext}"
+BASE_OUTNAME = "{objID}"
+BASEDIR_OUTNAME = "{outdir}/{objID}"
 FILETYPE_EXT = {'raw': 'raw', 'filtered': 'flt'}
 
 
@@ -186,63 +187,90 @@ def update_wcs_matrix(header, x0, y0, naxis1, naxis2, ra, dec, proj='ZEA'):
     return h
 
 
-def check_inputs(ra, dec, xsize, ysize):
+def check_inputs(ra, dec, xsize, ysize, objID=None):
 
     """ Check and fix inputs for cutout"""
     # Make sure that RA,DEC are the same type
     if type(ra) != type(dec):
         raise TypeError('RA and DEC need to be the same type()')
-    # Make sure that XSIZE, YSIZE are same type
+
+    if objID is not None and type(objID) != type(ra):
+        raise TypeError('objID needs to be the same type() as RA,DEC')
+
     if type(xsize) != type(ysize):
         raise TypeError('XSIZE and YSIZE need to be the same type()')
     # Make them iterable and proper length
     if hasattr(ra, '__iter__') is False and hasattr(dec, '__iter__') is False:
         ra = [ra]
         dec = [dec]
+    if objID is not None and hasattr(objID, '__iter__') is False:
+        objID = [objID]
     if hasattr(xsize, '__iter__') is False and hasattr(ysize, '__iter__') is False:
         xsize = [xsize]*len(ra)
         ysize = [ysize]*len(ra)
     # Make sure they are all of the same length
     if len(ra) != len(dec):
         raise TypeError('RA and DEC need to be the same length')
+    if objID is not None and len(objID) != len(ra):
+        raise TypeError('objID needs to be the same length as RA, DEC')
     if len(xsize) != len(ysize):
         raise TypeError('XSIZE and YSIZE need to be the same length')
     if (len(ra) != len(xsize)) or (len(ra) != len(ysize)):
         raise TypeError('RA, DEC and XSIZE and YSIZE need to be the same length')
-    return ra, dec, xsize, ysize
+    # Now make sure that all objID are unique
+    if objID is not None and len(set(objID)) != len(objID):
+        raise TypeError('Elements in objID are not unique')
+    # If objID is None, return a list of None of the same lenght as ra,dec
+    if objID is None:
+        objID = [objID]*len(ra)
+
+    return ra, dec, xsize, ysize, objID
 
 
-def get_thumbFitsName(ra, dec, filter, obsid, filetype_ext, prefix=PREFIX, ext='fits', outdir=os.getcwd()):
+def get_thumbFitsName(ra, dec, filter, obsid, filetype_ext,
+                      objID=None, prefix=PREFIX, ext='fits', outdir=os.getcwd()):
     """ Common function to set the Fits thumbnail name """
     ra = astrometry.dec2deg(ra/15., sep="", plussign=False)
     dec = astrometry.dec2deg(dec, sep="", plussign=True)
+    if objID is None:
+        objID = OBJ_ID.format(ra=ra, dec=dec, prefix=prefix)
+    # Locals need to be captured at the end
     kw = locals()
     outname = FITS_OUTNAME.format(**kw)
     return outname
 
 
-def get_thumbBaseDirName(ra, dec, prefix=PREFIX, outdir=os.getcwd()):
+def get_thumbBaseDirName(ra, dec, objID=None, prefix=PREFIX, outdir=os.getcwd()):
     """ Common function to set the Fits thumbnail name """
     ra = astrometry.dec2deg(ra/15., sep="", plussign=False)
     dec = astrometry.dec2deg(dec, sep="", plussign=True)
+    if objID is None:
+        objID = OBJ_ID.format(ra=ra, dec=dec, prefix=prefix)
+    # Locals need to be captured at the end
     kw = locals()
     basedir = BASEDIR_OUTNAME.format(**kw)
     return basedir
 
 
-def get_thumbLogName(ra, dec, prefix=PREFIX, ext='log', outdir=os.getcwd()):
+def get_thumbLogName(ra, dec, objID=None, prefix=PREFIX, ext='log', outdir=os.getcwd()):
     """ Common function to set the Fits thumbnail name """
     ra = astrometry.dec2deg(ra/15., sep="", plussign=False)
     dec = astrometry.dec2deg(dec, sep="", plussign=True)
+    if objID is None:
+        objID = OBJ_ID.format(ra=ra, dec=dec, prefix=prefix)
+    # Locals need to be captured at the end
     kw = locals()
     outname = LOG_OUTNAME.format(**kw)
     return outname
 
 
-def get_thumbBaseName(ra, dec, prefix=PREFIX):
+def get_thumbBaseName(ra, dec, objID=None, prefix=PREFIX):
     """ Common function to set the Fits thumbnail name """
     ra = astrometry.dec2deg(ra/15., sep="", plussign=False)
     dec = astrometry.dec2deg(dec, sep="", plussign=True)
+    if objID is None:
+        objID = OBJ_ID.format(ra=ra, dec=dec, prefix=prefix)
+    # Locals need to be captured at the end
     kw = locals()
     outname = BASE_OUTNAME.format(**kw)
     return outname
@@ -299,12 +327,50 @@ def get_NP(MP):
 
 
 def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
-               xsize=1.0, ysize=1.0, units='arcmin',
+               objID=None, xsize=1.0, ysize=1.0, units='arcmin',
                prefix=PREFIX, outdir=None, clobber=True, logger=None, counter=''):
-
     """
     Makes cutouts around ra, dec for a give xsize and ysize
     ra,dec can be scalars or lists/arrays
+
+    Input Parameters
+    ----------------
+    filename: string
+        The fitsfile (fits or fits.fz) to cut from
+    ra, dec: float or array of floats
+        The position in decimal degrees where we can to cut
+
+    Input/Output Parameters
+    -----------------------
+    These are dictionary that need to be inputs to be passed back when
+    running using multiprocessing
+
+    cutout_names: dictionary
+        Dict story the names of the cutout files
+    rejected_positions: dictionary
+        Dict of rejected positions with centers outside the FITS files
+
+    Optional inputs
+    ---------------
+    xsize, ysize: float or array of floats
+        The x,y size of the stamps in arcmins
+    objID: string or list of string
+        The list of object ID for each ra, dec pair
+    units: string
+        The units for the xsise, ysize
+    prefix: string
+        The prefix to prepend to the output names (i.e.: spt3g)
+    outdir: string
+        The path for the output directory
+    clobber: Bool
+        Overwrite file if they exist
+    logger: logging object
+        Optional logging object
+    counter: string
+        Optional counter to pass on for tracking flow
+
+    Returns:
+        cutout_names, rejected_positions
     """
 
     t0 = time.time()
@@ -315,7 +381,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         outdir = os.getcwd()
 
     # Check and fix inputs
-    ra, dec, xsize, ysize = check_inputs(ra, dec, xsize, ysize)
+    ra, dec, xsize, ysize, objID = check_inputs(ra, dec, xsize, ysize, objID)
 
     logger.info(f"Working on FITS file: {filename} -- {counter}")
     logger.info(f"Will cut: {len(ra)} stamps")
@@ -385,7 +451,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
     for k in range(len(ra)):
 
         # The basename for the (ra,dec)
-        objID = get_thumbBaseName(ra[k], dec[k], prefix=prefix)
+        if objID[k] is None:
+            objID[k] = get_thumbBaseName(ra[k], dec[k], prefix=prefix)
 
         # Define the geometry of the thumbnail
         x0, y0 = wcs.wcs_world2pix(ra[k], dec[k], 1)
@@ -449,12 +516,13 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
             h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x0, y0, naxis1, naxis2, ra[k], dec[k])
 
         # Get the basedir
-        basedir = get_thumbBaseDirName(ra[k], dec[k], prefix=prefix, outdir=outdir)
+        basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)
         if not os.path.exists(basedir):
             os.makedirs(basedir, mode=0o755, exist_ok=True)
 
         # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
-        outname = get_thumbFitsName(ra[k], dec[k], band, obsid, filetype_ext, prefix=prefix, outdir=basedir)
+        outname = get_thumbFitsName(ra[k], dec[k], band, obsid, filetype_ext,
+                                    objID=objID[k], prefix=prefix, outdir=basedir)
         # Save the outnames without the output directory
         outnames.append(outname.replace(f"{outdir}/", ''))
         # Write out the file
@@ -465,6 +533,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         ofits.close()
         logger.debug(f"Wrote: {outname}")
 
+    ifits.close()
     logger.info(f"Done {filename} in {elapsed_time(t0)} -- {counter}")
     cutout_names[filename] = outnames
 

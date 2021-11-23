@@ -111,6 +111,10 @@ def run(args):
     (xsize, ysize) = fitsfinder.check_xysize(df, xsize=args.xsize, ysize=args.ysize)
     args.ra = df.RA.values.tolist()
     args.dec = df.DEC.values.tolist()
+    if 'OBJID' in df.keys():
+        args.objID = df.OBJID.values.tolist()
+    else:
+        args.objID = None
 
     # Connect, get query and run query
     dbhandle = fitsfinder.connect_db(args.dbname)
@@ -150,7 +154,7 @@ def run(args):
     for file in args.files:
         counter = f"{k}/{Nfiles} files"
         ar = (file, args.ra, args.dec, cutout_dict, rejected_dict)
-        kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin',
+        kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin', 'objID': args.objID,
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter}
         if NP > 1:
             # Get result to catch exceptions later, after close()
