@@ -373,7 +373,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         cutout_names, rejected_positions
     """
 
-    t0 = time.time()
+    t1 = time.time()
     if not logger:
         logger = LOGGER
 
@@ -538,7 +538,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         logger.debug(f"Done writing {outname}: {elapsed_time(t0)}")
 
     ifits.close()
-    logger.info(f"Done {filename} in {elapsed_time(t0)} -- {counter}")
+    logger.info(f"Done {filename} in {elapsed_time(t1)} -- {counter}")
     cutout_names[filename] = outnames
 
     if len(rejected) > 0:
