@@ -8,6 +8,7 @@ import multiprocessing as mp
 import spt3g_cutter
 import spt3g_cutter.fitsfinder as fitsfinder
 import spt3g_cutter.cutterlib as cutterlib
+import os
 
 
 def cmdline():
@@ -56,9 +57,13 @@ def cmdline():
                         help="The yearly tag or tags to use [i.e. yearly_winter_2020]")
 
     # Logging options (loglevel/log_format/log_format_date)
+    if 'LOG_LEVEL' in os.environ:
+        default_log_level = os.environ['LOG_LEVEL']
+    else:
+        default_log_level = 'INFO'
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
     default_log_format_date = '%Y-%m-%d %H:%M:%S'
-    parser.add_argument("--loglevel", action="store", default='INFO', type=str.upper,
+    parser.add_argument("--loglevel", action="store", default=default_log_level, type=str.upper,
                         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                         help="Logging Level [DEBUG/INFO/WARNING/ERROR/CRITICAL]")
     parser.add_argument("--log_format", action="store", type=str, default=default_log_format,

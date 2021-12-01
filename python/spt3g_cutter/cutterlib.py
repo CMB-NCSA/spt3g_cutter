@@ -397,7 +397,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         raise Exception("ERROR: must define units as arcses/arcmin/degree only")
 
     # Get header/extensions/hdu
+    t0 = time.time()
     header, hdunum = get_headers_hdus(filename)
+    logger.debug(f"Done Getting header, hdus: {elapsed_time(t0)}")
     extnames = header.keys()  # Gets SCI and WGT
     logger.debug(f"Found EXTNAMES:{extnames}")
 
@@ -436,7 +438,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
     filetype_ext = FILETYPE_EXT[filetype]
 
     # Intitialize the FITS object
+    t0 = time.time()
     ifits = fitsio.FITS(filename, 'r')
+    logger.debug(f"Done loading fitsio.FITS({filename}): {elapsed_time(t0)}")
 
     if cutout_names is None:
         cutout_names = {}
@@ -526,12 +530,12 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         # Save the outnames without the output directory
         outnames.append(outname.replace(f"{outdir}/", ''))
         # Write out the file
+        t0 = time.time()
         ofits = fitsio.FITS(outname, 'rw', clobber=clobber)
         for EXTNAME in extnames:
             ofits.write(im_section[EXTNAME], extname=EXTNAME, header=h_section[EXTNAME])
-
         ofits.close()
-        logger.debug(f"Wrote: {outname}")
+        logger.debug(f"Done writing {outname}: {elapsed_time(t0)}")
 
     ifits.close()
     logger.info(f"Done {filename} in {elapsed_time(t0)} -- {counter}")
