@@ -23,7 +23,6 @@ import multiprocessing
 import yaml
 import datetime
 import subprocess
-import re
 
 # To avoid header warning from astropy
 warnings.filterwarnings('ignore', category=AstropyWarning, append=True)
@@ -38,7 +37,7 @@ FITS_OUTNAME = "{outdir}/{objID}_{filter}_{obsid}_{filetype_ext}.{ext}"
 LOG_OUTNAME = "{outdir}/{objID}.{ext}"
 BASE_OUTNAME = "{objID}"
 BASEDIR_OUTNAME = "{outdir}/{objID}"
-FILETYPE_EXT = {'raw': 'raw', 'filtered': 'flt'}
+FILETYPE_EXT = {'passthrough': 'psth', 'filtered': 'fltd'}
 
 
 def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
@@ -294,7 +293,7 @@ def get_headers_hdus(filename):
             header[extname] = h
             hdu[extname] = k
 
-    # Case 2 -- older DESDM files without EXTNAME
+    # Case 2 -- files without EXTNAME
     if len(header) < 1:
         LOGGER.debug("Getting EXTNAME by file")
         sci_hdu, wgt_hdu = get_fits_hdu_extensions_byfilename(filename)
@@ -373,6 +372,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         cutout_names, rejected_positions
     """
 
+    # global timer for function
     t1 = time.time()
     if not logger:
         logger = LOGGER
@@ -409,6 +409,10 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
     # Read in wcs with astropy
     wcs = WCS(header['SCI'])
 
+    # Get the dimensions of the parent image
+    NAXIS1 = header['SCI']['NAXIS1']
+    NAXIS2 = header['SCI']['NAXIS2']
+
     # Extract the band/filter from the header
     if 'BAND' in header['SCI']:
         band = header['SCI']['BAND'].strip()
@@ -426,10 +430,6 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
     # Extract FILETYPE from the header
     if 'FILETYPE' in header['SCI']:
         filetype = str(header['SCI']['FILETYPE']).strip()
-    elif re.search('_raw.fits', filename):
-        filetype = 'raw'
-    elif re.search('_flt.fits', filename):
-        filetype = 'filtered'
     else:
         # Try to get it from the filename
         raise Exception("ERROR: Cannot provide suitable FILETYPE from SCI header")
@@ -460,8 +460,6 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
 
         # Define the geometry of the thumbnail
         x0, y0 = wcs.wcs_world2pix(ra[k], dec[k], 1)
-        yL = 10000
-        xL = 10000
         x0 = round(float(x0))
         y0 = round(float(y0))
         dx = int(0.5*xsize[k]*scale/pixelscale)
@@ -474,7 +472,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         x2 = x0+dx
 
         # Make sure the (x0,y0) is contained within the image
-        if x0 < 0 or y0 < 0:
+        if x0 < 0 or y0 < 0 or x0 > NAXIS1 or y0 > NAXIS2:
             LOGGER.warning(f"(RA,DEC):{ra[k]},{dec[k]} outside {filename}")
             rejected.append(f"{ra[k]}, {dec[k]}, {objID}")
             continue
@@ -483,22 +481,12 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         # if negative set it to zero
         if y1 < 0:
             y1 = 0
-            dy = y0
-            y2 = y0 + dy
-
-        if y2 > yL:
-            y2 = yL
-            dy = yL - y0
-            y1 = y0-dy
-
+        if y2 > NAXIS2:
+            y2 = NAXIS2
         if x1 < 0:
             x1 = 0
-            dx = x0
-            x2 = x0 + dx
-        if x2 > xL:
-            x2 = xL
-            dx = xL - x0
-            x1 = x0 - dx
+        if x2 > NAXIS1:
+            x2 = NAXIS1
 
         im_section = OrderedDict()
         h_section = OrderedDict()

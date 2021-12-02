@@ -10,7 +10,7 @@ outdir: !ENV $JOB_OUTPUT_DIR
 date_start: "2021-06-25"
 date_end: "2021-06-30"
 bands: [90GHz, 150GHz, 220GHz]
-filetypes: [raw,]
+filetypes: [passthrough,]
 yearly: yearly_winter_2020
 # Logging:
 loglevel: INFO
