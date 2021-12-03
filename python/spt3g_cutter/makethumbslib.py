@@ -55,6 +55,8 @@ def cmdline():
                         help="The END date to search for files formatted [YYYY-MM-DD]")
     parser.add_argument("--yearly", nargs="*", default=None,
                         help="The yearly tag or tags to use [i.e. yearly_winter_2020]")
+    parser.add_argument("--version", action="version", version=f"spt3g_cutter: {spt3g_cutter.__version__}",
+                        help="Print version and exit")
 
     # Logging options (loglevel/log_format/log_format_date)
     if 'LOG_LEVEL' in os.environ:
