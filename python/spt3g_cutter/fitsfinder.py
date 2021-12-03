@@ -63,13 +63,15 @@ def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=N
     # Formatting dates
     if isinstance(date_start, str) and isinstance(date_end, str):
         and_dates = f"DATE_BEG between '{date_start}' and '{date_end}'"
-        if yearly is not None:
-            in_yearly = ','.join("\'{}\'".format(s) for s in yearly)
-            and_dates = f"{and_dates} or OBS_ID in ({in_yearly})"
-        if bands is not None or filetypes is not None:
-            and_dates = f"and ({and_dates})"
+        and_dates_or = ' or '
     else:
         and_dates = ''
+        and_dates_or = ''
+    if yearly is not None:
+        in_yearly = ','.join("\'{}\'".format(s) for s in yearly)
+        and_dates = f"{and_dates}{and_dates_or}OBS_ID in ({in_yearly})"
+    if bands is not None or filetypes is not None:
+        and_dates = f"and ({and_dates})"
 
     # Adding a where if needed
     if and_dates or and_bands or and_filetypes:
