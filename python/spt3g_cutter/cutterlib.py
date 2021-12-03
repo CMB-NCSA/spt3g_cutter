@@ -410,8 +410,12 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
     wcs = WCS(header['SCI'])
 
     # Get the dimensions of the parent image
-    NAXIS1 = header['SCI']['NAXIS1']
-    NAXIS2 = header['SCI']['NAXIS2']
+    if 'EXTNAME' in header['SCI'] and header['SCI']['EXTNAME'].strip() == 'COMPRESSED_IMAGE':
+        NAXIS1 = header['SCI']['ZNAXIS1']
+        NAXIS2 = header['SCI']['ZNAXIS2']
+    else:
+        NAXIS1 = header['SCI']['NAXIS1']
+        NAXIS2 = header['SCI']['NAXIS2']
 
     # Extract the band/filter from the header
     if 'BAND' in header['SCI']:
@@ -474,7 +478,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         # Make sure the (x0,y0) is contained within the image
         if x0 < 0 or y0 < 0 or x0 > NAXIS1 or y0 > NAXIS2:
             LOGGER.warning(f"(RA,DEC):{ra[k]},{dec[k]} outside {filename}")
-            rejected.append(f"{ra[k]}, {dec[k]}, {objID}")
+            LOGGER.warning(f"(x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
+            rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
             continue
 
         # Make sure we are not going beyond the limits
@@ -531,6 +536,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
 
     if len(rejected) > 0:
         rejected_positions[filename] = rejected
+        logger.info(f"{len(rejected)} positions for {filename}")
 
     return cutout_names, rejected_positions
 
@@ -572,7 +578,10 @@ def capture_job_metadata(args):
     """ Get more information abot this job for the manifest"""
 
     # Get the ID names for each ra,dec pair and store them
-    args.id_names = get_id_names(args.ra, args.dec, args.prefix)
+    if args.objID is None:
+        args.id_names = get_id_names(args.ra, args.dec, args.prefix)
+    else:
+        args.id_names = args.objID
 
     # Get the positions and id_names
     args.input_positions = get_positions_idnames(args)
