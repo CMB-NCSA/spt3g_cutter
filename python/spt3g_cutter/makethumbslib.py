@@ -55,6 +55,8 @@ def cmdline():
                         help="The END date to search for files formatted [YYYY-MM-DD]")
     parser.add_argument("--yearly", nargs="*", default=None,
                         help="The yearly tag or tags to use [i.e. yearly_winter_2020]")
+    parser.add_argument("--get_lightcurve", action='store_true', default=False,
+                        help="Extract light curve at pixel position for each object")
     parser.add_argument("--version", action="version", version=f"spt3g_cutter: {spt3g_cutter.__version__}",
                         help="Print version and exit")
 
@@ -138,6 +140,7 @@ def run(args):
 
     cutout_names = {}
     rejected_pos = {}
+    lightcurve = {}
 
     # Get the number of processors to use
     NP = cutterlib.get_NP(args.np)
@@ -147,10 +150,12 @@ def run(args):
         manager = mp.Manager()
         cutout_dict = manager.dict()
         rejected_dict = manager.dict()
+        lightcurve_dict = manager.dict()
         results = []
     else:
         cutout_dict = None
         rejected_dict = None
+        lightcurve_dict = None
 
     # Loop over all files
     args.files = rec['FILE'].tolist()
@@ -160,16 +165,18 @@ def run(args):
     t0 = time.time()
     for file in args.files:
         counter = f"{k}/{Nfiles} files"
-        ar = (file, args.ra, args.dec, cutout_dict, rejected_dict)
+        ar = (file, args.ra, args.dec, cutout_dict, rejected_dict, lightcurve_dict)
         kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin', 'objID': args.objID,
-              'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter}
+              'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter,
+              'get_lightcurve': args.get_lightcurve}
         if NP > 1:
             # Get result to catch exceptions later, after close()
             s = p.apply_async(cutterlib.fitscutter, args=ar, kwds=kw)
             results.append(s)
         else:
-            names, pos = cutterlib.fitscutter(*ar, **kw)
+            names, pos, lc = cutterlib.fitscutter(*ar, **kw)
             cutout_names.update(names)
+            lightcurve.update(lc)
         k += 1
 
     if NP > 1:
@@ -182,6 +189,10 @@ def run(args):
         # Update with returned dictionary
         cutout_names = dict(cutout_dict)
         rejected_pos = dict(rejected_dict)
+        lightcurve = dict(lightcurve_dict)
+
+    if args.get_lightcurve:
+        print("We need to consolidate the LC data")
 
     # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
@@ -191,5 +202,4 @@ def run(args):
 
     # Write the manifest yaml file
     cutterlib.write_manifest(args)
-
     logger.info(f"Grand Total time: {cutterlib.elapsed_time(t0)}")

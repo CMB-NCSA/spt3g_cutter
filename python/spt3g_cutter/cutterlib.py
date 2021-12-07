@@ -325,8 +325,8 @@ def get_NP(MP):
     return NP
 
 
-def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
-               objID=None, xsize=1.0, ysize=1.0, units='arcmin',
+def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
+               objID=None, xsize=1.0, ysize=1.0, units='arcmin', get_lightcurve=False,
                prefix=PREFIX, outdir=None, clobber=True, logger=None, counter=''):
     """
     Makes cutouts around ra, dec for a give xsize and ysize
@@ -438,7 +438,12 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         # Try to get it from the filename
         raise Exception("ERROR: Cannot provide suitable FILETYPE from SCI header")
 
-    # Shorten filetype=filtered to flt -- temporary fix
+    if 'DATE-BEG' in header['SCI']:
+        date_beg = str(header['SCI']['DATE-BEG']).strip()
+    else:
+        raise Exception("ERROR: Cannot provide suitable DATE_BEG from SCI header")
+
+    # The extension to use for FILETYPE
     filetype_ext = FILETYPE_EXT[filetype]
 
     # Intitialize the FITS object
@@ -450,9 +455,18 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         cutout_names = {}
     if rejected_positions is None:
         rejected_positions = {}
+    if lightcurve is None:
+        lightcurve = {}
 
+    # Local lists/dicts
     outnames = []
     rejected = []
+    lc_local = {}
+
+    # Define the ID for the lightcurve information from this filename
+    if get_lightcurve:
+        lcID = f'{date_beg}_{band}'
+        lc_local['objID'] = objID
 
     ######################################
     # Loop over ra/dec and xsize,ysize
@@ -502,6 +516,11 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         for EXTNAME in extnames:
             # The hdunum for that extname
             HDUNUM = hdunum[EXTNAME]
+            # Append data from (x0, y0) pixel from EXTNAME
+            if get_lightcurve:
+                data_extname = ifits[HDUNUM][int(y0), int(x0)][0][0]
+                lc_local.setdefault(EXTNAME, []).append(data_extname)
+
             # Create a canvas
             im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
             # Read in the image section we want for SCI/WGT
@@ -532,13 +551,16 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
 
     ifits.close()
     logger.info(f"Done {filename} in {elapsed_time(t1)} -- {counter}")
+
+    # Assing internal lists/dict to managed dictionalks
     cutout_names[filename] = outnames
+    lightcurve[lcID] = lc_local
 
     if len(rejected) > 0:
         rejected_positions[filename] = rejected
         logger.info(f"{len(rejected)} positions for {filename}")
 
-    return cutout_names, rejected_positions
+    return cutout_names, rejected_positions, lightcurve
 
 
 def get_id_names(ra, dec, prefix):
