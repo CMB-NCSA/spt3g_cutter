@@ -465,7 +465,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
     # Define the ID for the lightcurve information from this filename
     if get_lightcurve:
-        lcID = f'{date_beg}_{band}'
+        lcID = f'{obsid}_{filetype}'
+        lc_local['DATE-BEG'] = date_beg
+        lc_local['BAND'] = band
         lc_local['objID'] = objID
 
     ######################################
@@ -519,7 +521,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
             # Append data from (x0, y0) pixel from EXTNAME
             if get_lightcurve:
                 data_extname = ifits[HDUNUM][int(y0), int(x0)][0][0]
-                lc_local.setdefault(EXTNAME, []).append(data_extname)
+                lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
 
             # Create a canvas
             im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))

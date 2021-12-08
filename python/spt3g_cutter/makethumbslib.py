@@ -193,6 +193,9 @@ def run(args):
 
     if args.get_lightcurve:
         print("We need to consolidate the LC data")
+        for k in lightcurve.keys():
+            print(f"key:{k}")
+            print(f"      {lightcurve[k]}")
 
     # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
