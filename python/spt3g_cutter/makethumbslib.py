@@ -191,17 +191,16 @@ def run(args):
         rejected_pos = dict(rejected_dict)
         lightcurve = dict(lightcurve_dict)
 
-    if args.get_lightcurve:
-        print("We need to consolidate the LC data")
-        for k in lightcurve.keys():
-            print(f"key:{k}")
-            print(f"      {lightcurve[k]}")
-
     # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
     args.rejected_positions = rejected_pos
 
     args = cutterlib.capture_job_metadata(args)
+
+    if args.get_lightcurve:
+        logger.info("Repacking lightcurve information")
+        args.lc = cutterlib.repack_lightcurve(lightcurve, args)
+        cutterlib.write_lightcurve(args)
 
     # Write the manifest yaml file
     cutterlib.write_manifest(args)
