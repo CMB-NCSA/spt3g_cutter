@@ -325,8 +325,8 @@ def get_NP(MP):
     return NP
 
 
-def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
-               objID=None, xsize=1.0, ysize=1.0, units='arcmin',
+def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
+               objID=None, xsize=1.0, ysize=1.0, units='arcmin', get_lightcurve=False,
                prefix=PREFIX, outdir=None, clobber=True, logger=None, counter=''):
     """
     Makes cutouts around ra, dec for a give xsize and ysize
@@ -348,6 +348,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         Dict story the names of the cutout files
     rejected_positions: dictionary
         Dict of rejected positions with centers outside the FITS files
+    lightcurve: dictionary
+        Dict with lightcurve information
 
     Optional inputs
     ---------------
@@ -438,7 +440,12 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         # Try to get it from the filename
         raise Exception("ERROR: Cannot provide suitable FILETYPE from SCI header")
 
-    # Shorten filetype=filtered to flt -- temporary fix
+    if 'DATE-BEG' in header['SCI']:
+        date_beg = str(header['SCI']['DATE-BEG']).strip()
+    else:
+        raise Exception("ERROR: Cannot provide suitable DATE_BEG from SCI header")
+
+    # The extension to use for FILETYPE
     filetype_ext = FILETYPE_EXT[filetype]
 
     # Intitialize the FITS object
@@ -450,9 +457,21 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         cutout_names = {}
     if rejected_positions is None:
         rejected_positions = {}
+    if lightcurve is None:
+        lightcurve = {}
 
+    # Local lists/dicts
     outnames = []
     rejected = []
+    lc_local = {}
+
+    # Define the ID for the lightcurve information from this filename
+    if get_lightcurve:
+        lcID = f'{obsid}_{filetype}'
+        lc_local['DATE-BEG'] = date_beg
+        lc_local['BAND'] = band
+        lc_local['objID'] = objID
+        lc_local['FILETYPE'] = filetype
 
     ######################################
     # Loop over ra/dec and xsize,ysize
@@ -502,6 +521,11 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
         for EXTNAME in extnames:
             # The hdunum for that extname
             HDUNUM = hdunum[EXTNAME]
+            # Append data from (x0, y0) pixel from EXTNAME
+            if get_lightcurve:
+                data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
+                lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
+
             # Create a canvas
             im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
             # Read in the image section we want for SCI/WGT
@@ -511,6 +535,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
             naxis2 = numpy.shape(im_section[EXTNAME])[0]
             # Update the WCS in the headers and make a copy
             h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x0, y0, naxis1, naxis2, ra[k], dec[k])
+            # Add the objID to the header of the thumbnail
+            rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
+            h_section[EXTNAME].add_record(rec)
 
         # Get the basedir
         basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)
@@ -532,13 +559,16 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions,
 
     ifits.close()
     logger.info(f"Done {filename} in {elapsed_time(t1)} -- {counter}")
+
+    # Assing internal lists/dict to managed dictionalks
     cutout_names[filename] = outnames
+    lightcurve[lcID] = lc_local
 
     if len(rejected) > 0:
         rejected_positions[filename] = rejected
         logger.info(f"{len(rejected)} positions for {filename}")
 
-    return cutout_names, rejected_positions
+    return cutout_names, rejected_positions, lightcurve
 
 
 def get_id_names(ra, dec, prefix):
@@ -555,9 +585,7 @@ def get_size_on_disk(outdir):
 
 
 def get_job_info(args):
-
-    """Get the JOB_ID and JOB_OUTPUT_DIR from the environment"""
-
+    " Get the JOB_ID and JOB_OUTPUT_DIR from the environment "
     JOB_ID = None
     JOB_OUTPUT_DIR = None
     if 'JOB_ID' in os.environ:
@@ -568,6 +596,7 @@ def get_job_info(args):
 
 
 def get_positions_idnames(args):
+    "Get the id names for all positions"
     positions_idnames = []
     for k in range(len(args.ra)):
         positions_idnames.append(f"{args.ra[k]}, {args.dec[k]}, {args.id_names[k]}")
@@ -599,6 +628,78 @@ def capture_job_metadata(args):
     # Get the job information from k8s
     (args.JOB_ID, args.JOB_OUTPUT_DIR) = get_job_info(args)
     return args
+
+
+def repack_lightcurve(lightcurve, args):
+    "Repack the lightcurve dictionary keyed by objID"
+
+    LC = {}
+    for objID in args.id_names:
+        dates = {}
+        flux_SCI = {}
+        flux_WGT = {}
+        # Loop over the observations (OBS-ID + filetype)
+        for obs in lightcurve:
+
+            # Check if we have weight flux:
+            got_WGT = False
+            if 'flux_WGT' in lightcurve[obs]:
+                got_WGT = True
+
+            # Get filetype and band
+            FILETYPE = lightcurve[obs]['FILETYPE']
+            BAND = lightcurve[obs]['BAND']
+            DATE_BEG = lightcurve[obs]['DATE-BEG']
+
+            # Initialize dictionary for per band
+            if BAND not in dates:
+                LOGGER.debug(f"Initializing dates/flux for {BAND}")
+                dates[BAND] = {}
+                flux_SCI[BAND] = {}
+                if got_WGT:
+                    flux_WGT[BAND] = {}
+
+            # Initialize dictionary for nested dict for filetype
+            for band in dates.keys():
+                if FILETYPE not in dates[band]:
+                    LOGGER.debug(f"Initializing dates/flux for {band}/{FILETYPE}")
+                    dates[band][FILETYPE] = []
+                    flux_SCI[band][FILETYPE] = []
+                    if got_WGT:
+                        flux_WGT[band][FILETYPE] = []
+
+            # Get the date and store in list for [band][filter]
+            dates[BAND][FILETYPE].append(DATE_BEG)
+            # Store data in list keyed to filetype
+
+            # Get the index for objID
+            idx = lightcurve[obs]['objID'].index(objID)
+            flux_sci = lightcurve[obs]['flux_SCI'][idx]
+            flux_SCI[BAND][FILETYPE].append(flux_sci)
+            if 'flux_WGT' in lightcurve[obs]:
+                flux_wgt = lightcurve[obs]['flux_WGT'][idx]
+                flux_WGT[BAND][FILETYPE].append(flux_wgt)
+
+        # Put everything into a main dictionary
+        LC[objID] = {}
+        LC[objID]['dates'] = dates
+        LC[objID]['flux_SCI'] = flux_SCI
+        LC[objID]['flux_WGT'] = flux_WGT
+
+    return LC
+
+
+def write_lightcurve(args):
+
+    d = datetime.datetime.today()
+    date = d.isoformat('T', 'seconds')
+    comment = f"# Lightcurve file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
+
+    yaml_file = os.path.join(args.outdir, 'lightcurve.yaml')
+    with open(yaml_file, 'w') as lightcurve_file:
+        lightcurve_file.write(comment)
+        yaml.dump(args.lc, lightcurve_file, sort_keys=False, default_flow_style=False)
+    LOGGER.info(f"Wrote lightcurve file to: {yaml_file}")
 
 
 def write_manifest(args):
