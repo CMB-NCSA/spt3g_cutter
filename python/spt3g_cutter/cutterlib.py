@@ -562,7 +562,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
     # Assing internal lists/dict to managed dictionalks
     cutout_names[filename] = outnames
-    lightcurve[lcID] = lc_local
+    if get_lightcurve:
+        lightcurve[lcID] = lc_local
 
     if len(rejected) > 0:
         rejected_positions[filename] = rejected
