@@ -535,6 +535,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
             naxis2 = numpy.shape(im_section[EXTNAME])[0]
             # Update the WCS in the headers and make a copy
             h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x0, y0, naxis1, naxis2, ra[k], dec[k])
+            # Add the objID to the header of the thumbnail
+            rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
+            h_section[EXTNAME].add_record(rec)
 
         # Get the basedir
         basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)
@@ -647,8 +650,6 @@ def repack_lightcurve(lightcurve, args):
             FILETYPE = lightcurve[obs]['FILETYPE']
             BAND = lightcurve[obs]['BAND']
             DATE_BEG = lightcurve[obs]['DATE-BEG']
-
-            print(obs, BAND, FILETYPE, DATE_BEG)
 
             # Initialize dictionary for per band
             if BAND not in dates:
