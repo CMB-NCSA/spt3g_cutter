@@ -2,18 +2,20 @@
 import sys
 import traceback
 import logging
-import spt3g_cutter.makethumbslib as makethumbslib
+import spt3g_cutter
 
 if __name__ == "__main__":
-    # Get the command-line arguments
-    args = makethumbslib.cmdline()
 
     # Get the logger
     logger = logging.getLogger(__name__)
+    logger.info(f"Running spt3g_cutter version: {spt3g_cutter.__version__}")
+
+    # Get the command-line arguments
+    args = spt3g_cutter.makethumbslib.cmdline()
 
     # Run the maker
     try:
-        makethumbslib.run(args)
+        spt3g_cutter.makethumbslib.run(args)
     except Exception:
         (type, value, my_traceback) = sys.exc_info()
         string_trace = traceback.format_exception(type, value, my_traceback)

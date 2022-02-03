@@ -43,7 +43,7 @@ def cmdline():
     # DB options
     parser.add_argument("--dbname", type=str, action='store', default=None,
                         help="Database (file) to connect")
-    parser.add_argument("--tablename", type=str, action='store', default='file_info_v1',
+    parser.add_argument("--tablename", type=str, action='store', default='file_info_v2',
                         help="Name of tablw with file informatiom")
     parser.add_argument("--bands", nargs="*", default=['90GHz', '150GHz', '220GHz'],
                         help="The bands to select from: 90GHz, 150GHz and 220GHz")
@@ -86,8 +86,9 @@ def cmdline():
     args.loglevel = getattr(logging, args.loglevel)
 
     # In case we pass and yearly tags
-    if len(args.yearly) == 0:
-        args.yearly = None
+    if args.yearly is not None:
+        if len(args.yearly) == 0:
+            args.yearly = None
 
     # Make sure that both date_start/end are defined or both are None
     if args.date_start is None and args.date_end is None:

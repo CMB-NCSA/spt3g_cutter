@@ -280,31 +280,41 @@ def get_headers_hdus(filename):
     header = OrderedDict()
     hdu = OrderedDict()
 
-    # Case 1 -- for well-defined fitsfiles with EXTNAME
+    is_compressed = False
     with fitsio.FITS(filename) as fits:
+        # Case 1 -- for well-defined fitsfiles with EXTNAME
         for k in range(len(fits)):
             h = fits[k].read_header()
+            # Is compressed
+            if h.get('ZIMAGE'):
+                is_compressed = True
             # Make sure that we can get the EXTNAME
             if not h.get('EXTNAME'):
                 continue
             extname = h['EXTNAME'].strip()
             if extname == 'COMPRESSED_IMAGE':
+                is_compressed = True
                 continue
             header[extname] = h
             hdu[extname] = k
 
-    # Case 2 -- files without EXTNAME
-    if len(header) < 1:
-        LOGGER.debug("Getting EXTNAME by file")
-        sci_hdu, wgt_hdu = get_fits_hdu_extensions_byfilename(filename)
-        fits = fitsio.FITS(filename)
-        header['SCI'] = fits[sci_hdu].read_header()
-        hdu['SCI'] = sci_hdu
-        try:
-            header['WGT'] = fits[wgt_hdu].read_header()
-            hdu['WGT'] = wgt_hdu
-        except IOError:
-            LOGGER.warning(f"No WGT HDU for: {filename}")
+        # Case 2 -- files without EXTNAME
+        if len(header) < 1:
+            LOGGER.debug("Getting EXTNAME by compression")
+            if is_compressed:
+                sci_hdu = 1
+                wgt_hdu = 2
+            else:
+                sci_hdu = 0
+                wgt_hdu = 1
+            # Assign headers and hdus
+            header['SCI'] = fits[sci_hdu].read_header()
+            hdu['SCI'] = sci_hdu
+            try:
+                header['WGT'] = fits[wgt_hdu].read_header()
+                hdu['WGT'] = wgt_hdu
+            except IOError:
+                LOGGER.warning(f"No WGT HDU for: {filename}")
 
     return header, hdu
 
