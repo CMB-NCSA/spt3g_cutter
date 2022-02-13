@@ -109,5 +109,7 @@ def query2rec(query, dbhandle):
         names = [d[0] for d in cur.description]
         return numpy.rec.array(tuples, names=names)
     else:
-        logger.warning("# Warning: DB Query in query2rec() returned no results")
+        logger.error("# DB Query in query2rec() returned no results")
+        msg = f"# Error with query:{query}"
+        raise RuntimeError(msg)
     return False

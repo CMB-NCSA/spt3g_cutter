@@ -98,6 +98,9 @@ def cmdline():
     else:
         raise ValueError('Both --date_start and --date_end must be defined')
 
+    if args.date_start == args.date_end:
+        raise ValueError('--date_start and --date_end must be diferent')
+
     return args
 
 
@@ -136,8 +139,6 @@ def run(args):
                                  yearly=args.yearly)
     logger.info(f"Running query: {query}")
     rec = fitsfinder.query2rec(query, dbhandle)
-    if rec is False:
-        raise RuntimeError(f"Error with query:{query}")
 
     cutout_names = {}
     rejected_pos = {}
@@ -199,9 +200,9 @@ def run(args):
     args = cutterlib.capture_job_metadata(args)
 
     if args.get_lightcurve:
-        logger.info("Repacking lightcurve information")
         args.lc = cutterlib.repack_lightcurve(lightcurve, args)
         cutterlib.write_lightcurve(args)
+        logger.info("Done with lightcurve")
 
     # Write the manifest yaml file
     cutterlib.write_manifest(args)

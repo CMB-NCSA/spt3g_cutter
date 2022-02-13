@@ -590,8 +590,14 @@ def get_id_names(ra, dec, prefix):
     return names
 
 
-def get_size_on_disk(outdir):
-    size = subprocess.check_output(['du', '-sh', outdir]).split()[0].decode('ascii')
+def get_size_on_disk(outdir, timeout=15):
+    "Get the size of the outdir outputs"
+    LOGGER.info(f"Getting size_on_disk with timeout={timeout}s.")
+    try:
+        size = subprocess.check_output(['du', '-sh', outdir], timeout=timeout).split()[0].decode('ascii')
+    except subprocess.TimeoutExpired:
+        LOGGER.warning(f"Cannot get_size_on_disk, timeout after {timeout}s.")
+        size = f"Timed out: {timeout} sec, too large to compute"
     return size
 
 
@@ -616,6 +622,8 @@ def get_positions_idnames(args):
 
 def capture_job_metadata(args):
     """ Get more information abot this job for the manifest"""
+
+    LOGGER.info("Getting job metadata for manifest file")
 
     # Get the ID names for each ra,dec pair and store them
     if args.objID is None:
@@ -644,6 +652,7 @@ def capture_job_metadata(args):
 def repack_lightcurve(lightcurve, args):
     "Repack the lightcurve dictionary keyed by objID"
 
+    LOGGER.info("Repacking lightcurve information")
     LC = {}
     for objID in args.id_names:
         dates = {}
@@ -651,11 +660,6 @@ def repack_lightcurve(lightcurve, args):
         flux_WGT = {}
         # Loop over the observations (OBS-ID + filetype)
         for obs in lightcurve:
-
-            # Check if we have weight flux:
-            got_WGT = False
-            if 'flux_WGT' in lightcurve[obs]:
-                got_WGT = True
 
             # Get filetype and band
             FILETYPE = lightcurve[obs]['FILETYPE']
@@ -667,8 +671,7 @@ def repack_lightcurve(lightcurve, args):
                 LOGGER.debug(f"Initializing dates/flux for {BAND}")
                 dates[BAND] = {}
                 flux_SCI[BAND] = {}
-                if got_WGT:
-                    flux_WGT[BAND] = {}
+                flux_WGT[BAND] = {}
 
             # Initialize dictionary for nested dict for filetype
             for band in dates.keys():
@@ -676,8 +679,7 @@ def repack_lightcurve(lightcurve, args):
                     LOGGER.debug(f"Initializing dates/flux for {band}/{FILETYPE}")
                     dates[band][FILETYPE] = []
                     flux_SCI[band][FILETYPE] = []
-                    if got_WGT:
-                        flux_WGT[band][FILETYPE] = []
+                    flux_WGT[band][FILETYPE] = []
 
             # Get the date and store in list for [band][filter]
             dates[BAND][FILETYPE].append(DATE_BEG)
@@ -687,9 +689,13 @@ def repack_lightcurve(lightcurve, args):
             idx = lightcurve[obs]['objID'].index(objID)
             flux_sci = lightcurve[obs]['flux_SCI'][idx]
             flux_SCI[BAND][FILETYPE].append(flux_sci)
-            if 'flux_WGT' in lightcurve[obs]:
+            try:
                 flux_wgt = lightcurve[obs]['flux_WGT'][idx]
-                flux_WGT[BAND][FILETYPE].append(flux_wgt)
+            except KeyError:
+                flux_wgt = None
+                LOGGER.warning(f"NO flux_WGT - obs:{objID} date:{DATE_BEG} BAND:{BAND} FILETYPE: {FILETYPE}")
+
+            flux_WGT[BAND][FILETYPE].append(flux_wgt)
 
         # Put everything into a main dictionary
         LC[objID] = {}
