@@ -98,9 +98,6 @@ def cmdline():
     else:
         raise ValueError('Both --date_start and --date_end must be defined')
 
-    if args.date_start == args.date_end:
-        raise ValueError('--date_start and --date_end must be diferent')
-
     return args
 
 
