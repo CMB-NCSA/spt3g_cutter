@@ -175,6 +175,7 @@ def run(args):
         else:
             names, pos, lc = cutterlib.fitscutter(*ar, **kw)
             cutout_names.update(names)
+            rejected_pos.update(pos)
             lightcurve.update(lc)
         k += 1
 
@@ -193,6 +194,9 @@ def run(args):
     # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
     args.rejected_positions = rejected_pos
+
+    # Get the rejected ids:
+    args.rejected_ids = cutterlib.get_rejected_ids(args)
 
     args = cutterlib.capture_job_metadata(args)
 

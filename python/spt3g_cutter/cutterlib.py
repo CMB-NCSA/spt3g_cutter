@@ -474,13 +474,13 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     outnames = []
     rejected = []
     lc_local = {}
+    rejected_ids = []
 
     # Define the ID for the lightcurve information from this filename
     if get_lightcurve:
         lcID = f'{obsid}_{filetype}'
         lc_local['DATE-BEG'] = date_beg
         lc_local['BAND'] = band
-        lc_local['objID'] = objID
         lc_local['FILETYPE'] = filetype
 
     ######################################
@@ -509,6 +509,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
             LOGGER.warning(f"(RA,DEC):{ra[k]},{dec[k]} outside {filename}")
             LOGGER.warning(f"(x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
             rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
+            rejected_ids.append(objID[k])
             continue
 
         # Make sure we are not going beyond the limits
@@ -573,11 +574,17 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     # Assing internal lists/dict to managed dictionalks
     cutout_names[filename] = outnames
     if get_lightcurve:
+        # Remove the rejected ids from objID list
+        for id in rejected_ids:
+            logger.warning(f"Removing rejected id:{id} from lightcurve[objID]")
+            objID.remove(id)
+        # We add the objID array after we pruned it from rejected ids
+        lc_local['objID'] = objID
         lightcurve[lcID] = lc_local
 
     if len(rejected) > 0:
         rejected_positions[filename] = rejected
-        logger.info(f"{len(rejected)} positions for {filename}")
+        logger.info(f"Rejected {len(rejected)} positions for {filename}")
 
     return cutout_names, rejected_positions, lightcurve
 
@@ -655,6 +662,11 @@ def repack_lightcurve(lightcurve, args):
     LOGGER.info("Repacking lightcurve information")
     LC = {}
     for objID in args.id_names:
+
+        if objID in args.rejected_ids:
+            LOGGER.warning(f"Ignoring {objID} -- rejected")
+            continue
+
         dates = {}
         flux_SCI = {}
         flux_WGT = {}
@@ -704,6 +716,19 @@ def repack_lightcurve(lightcurve, args):
         LC[objID]['flux_WGT'] = flux_WGT
 
     return LC
+
+
+def get_rejected_ids(args):
+    "Parse the rejected_positions and get list of rejected ids"
+
+    rejected_ids = []
+    for key, list in args.rejected_positions.items():
+        for item in list:
+            id = item.split(', ')[2]
+            if id not in rejected_ids:
+                rejected_ids.append(id)
+    LOGGER.info(f"Found {len(rejected_ids)} objID to reject")
+    return rejected_ids
 
 
 def write_lightcurve(args):
