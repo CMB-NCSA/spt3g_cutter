@@ -59,6 +59,8 @@ def cmdline():
                         help="Extract light curve at pixel position for each object")
     parser.add_argument("--version", action="version", version=f"spt3g_cutter: {spt3g_cutter.__version__}",
                         help="Print version and exit")
+    parser.add_argument("--get_uniform_coverage", action='store_true', default=False,
+                        help="Get only objects within the uniform coverage")
 
     # Logging options (loglevel/log_format/log_format_date)
     if 'LOG_LEVEL' in os.environ:
@@ -167,7 +169,8 @@ def run(args):
         ar = (file, args.ra, args.dec, cutout_dict, rejected_dict, lightcurve_dict)
         kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin', 'objID': args.objID,
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter,
-              'get_lightcurve': args.get_lightcurve}
+              'get_lightcurve': args.get_lightcurve,
+              'get_uniform_coverage': args.get_uniform_coverage}
         if NP > 1:
             # Get result to catch exceptions later, after close()
             s = p.apply_async(cutterlib.fitscutter, args=ar, kwds=kw)

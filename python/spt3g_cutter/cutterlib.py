@@ -342,7 +342,7 @@ def get_NP(MP):
 def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
                objID=None, xsize=1.0, ysize=1.0, units='arcmin', get_lightcurve=False,
                prefix=PREFIX, outdir=None, clobber=True, logger=None, counter='',
-               select_uniform_coverage=True):
+               get_uniform_coverage=False):
     """
     Makes cutouts around ra, dec for a give xsize and ysize
     ra,dec can be scalars or lists/arrays
@@ -384,7 +384,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
         Optional logging object
     counter: string
         Optional counter to pass on for tracking flow
-    select_uniform_coverage: bool
+    get_uniform_coverage: bool
         Select only objects in the SPT uniform coverage
 
     Returns:
@@ -495,7 +495,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
     # Define the ID for the lightcurve information from this filename
     if get_lightcurve:
-        lcID = f'{obsid}_{filetype}'
+        lcID = filename
         lc_local['DATE-BEG'] = date_beg
         lc_local['BAND'] = band
         lc_local['FILETYPE'] = filetype
@@ -522,7 +522,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
         x2 = x0+dx
 
         # Check if in field extent
-        if select_uniform_coverage and not in_uniform_coverage(ra[k], dec[k], object):
+        if get_uniform_coverage and not in_uniform_coverage(ra[k], dec[k], object):
             LOGGER.warning(f"(RA,DEC):{ra[k]},{dec[k]} outside field extent")
             rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
             rejected_ids.append(objID[k])
@@ -598,12 +598,14 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     # Assing internal lists/dict to managed dictionalks
     cutout_names[filename] = outnames
     if get_lightcurve:
-        # Remove the rejected ids from objID list
+        # Remove the rejected ids from objID list,
+        # Otherwise index search will fail
         for id in rejected_ids:
             logger.warning(f"Removing rejected id:{id} from lightcurve[objID]")
             objID.remove(id)
         # We add the objID array after we pruned it from rejected ids
         lc_local['objID'] = objID
+        lc_local['rejected_ids'] = rejected_ids
         lightcurve[lcID] = lc_local
 
     if len(rejected) > 0:
@@ -687,15 +689,15 @@ def repack_lightcurve(lightcurve, args):
     LC = {}
     for objID in args.id_names:
 
-        if objID in args.rejected_ids:
-            LOGGER.warning(f"Ignoring {objID} -- rejected")
-            continue
-
         dates = {}
         flux_SCI = {}
         flux_WGT = {}
         # Loop over the observations (OBS-ID + filetype)
         for obs in lightcurve:
+
+            if objID in lightcurve[obs]['rejected_ids']:
+                LOGGER.warning(f"Ignoring {objID} for {obs} -- rejected")
+                continue
 
             # Get filetype and band
             FILETYPE = lightcurve[obs]['FILETYPE']
@@ -733,11 +735,12 @@ def repack_lightcurve(lightcurve, args):
 
             flux_WGT[BAND][FILETYPE].append(flux_wgt)
 
-        # Put everything into a main dictionary
-        LC[objID] = {}
-        LC[objID]['dates'] = dates
-        LC[objID]['flux_SCI'] = flux_SCI
-        LC[objID]['flux_WGT'] = flux_WGT
+        # Put everything into a main dictionary, only if we get any hits
+        if len(flux_WGT) > 0:
+            LC[objID] = {}
+            LC[objID]['dates'] = dates
+            LC[objID]['flux_SCI'] = flux_SCI
+            LC[objID]['flux_WGT'] = flux_WGT
 
     return LC
 
@@ -945,7 +948,7 @@ def get_field_extent(
         "spt3g-summerc": ((150, 225), (-41, -29)),
 
         # Extra custom field for yearly
-        "yearly": ((53.25, 306.25), (-72, -40.25)),
+        "yearly": ((306.25, 53.25), (-72, -40.25)),
     }
 
     ra, dec = extents[field]
