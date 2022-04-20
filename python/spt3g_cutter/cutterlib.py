@@ -24,6 +24,8 @@ import yaml
 import datetime
 import subprocess
 import numpy as np
+import pandas
+import dateutil
 
 core_G3Units_deg = 0.017453292519943295
 core_G3Units_rad = 1
@@ -342,7 +344,7 @@ def get_NP(MP):
 def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
                objID=None, xsize=1.0, ysize=1.0, units='arcmin', get_lightcurve=False,
                prefix=PREFIX, outdir=None, clobber=True, logger=None, counter='',
-               get_uniform_coverage=False):
+               get_uniform_coverage=False, nofits=False):
     """
     Makes cutouts around ra, dec for a give xsize and ysize
     ra,dec can be scalars or lists/arrays
@@ -460,7 +462,12 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     if 'DATE-BEG' in header['SCI']:
         date_beg = str(header['SCI']['DATE-BEG']).strip()
     else:
-        raise Exception("ERROR: Cannot provide suitable DATE_BEG from SCI header")
+        raise Exception("ERROR: Cannot provide suitable DATE-BEG from SCI header")
+
+    if 'DATE-END' in header['SCI']:
+        date_end = str(header['SCI']['DATE-END']).strip()
+    else:
+        raise Exception("ERROR: Cannot provide suitable DATE-END from SCI header")
 
     # Get OBJECT, we will use as fieldname
     if 'OBJECT' in header['SCI']:
@@ -497,6 +504,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     if get_lightcurve:
         lcID = filename
         lc_local['DATE-BEG'] = date_beg
+        lc_local['DATE-END'] = date_end
         lc_local['BAND'] = band
         lc_local['FILETYPE'] = filetype
 
@@ -561,6 +569,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
                 data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
                 lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
 
+            # Skip the fits part if notfits is true
+            if nofits:
+                continue
             # Create a canvas
             im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
             # Read in the image section we want for SCI/WGT
@@ -573,6 +584,11 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
             # Add the objID to the header of the thumbnail
             rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
             h_section[EXTNAME].add_record(rec)
+
+        # Skip the fits part if notfits is true
+        if nofits:
+            LOGGER.info(f"Skiping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
+            continue
 
         # Get the basedir
         basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)
@@ -682,14 +698,27 @@ def capture_job_metadata(args):
     return args
 
 
+def get_mean_date(date1, date2):
+    """ Gets the mean date betwenn to timestamps"""
+    # Need to try/except to catch dates for yearly maps
+    try:
+        D1 = pandas.to_datetime(date1)
+        D2 = pandas.to_datetime(date2)
+        date_mean = pandas.Timestamp((D1.value + D2.value)/2.).isoformat()
+    except (TypeError, dateutil.parser._parser.ParserError):
+        date_mean = date1
+    return date_mean
+
+
 def repack_lightcurve(lightcurve, args):
     "Repack the lightcurve dictionary keyed by objID"
 
     LOGGER.info("Repacking lightcurve information")
     LC = {}
     for objID in args.id_names:
-
-        dates = {}
+        dates_ave = {}
+        dates_beg = {}
+        dates_end = {}
         flux_SCI = {}
         flux_WGT = {}
         # Loop over the observations (OBS-ID + filetype)
@@ -703,24 +732,32 @@ def repack_lightcurve(lightcurve, args):
             FILETYPE = lightcurve[obs]['FILETYPE']
             BAND = lightcurve[obs]['BAND']
             DATE_BEG = lightcurve[obs]['DATE-BEG']
+            DATE_END = lightcurve[obs]['DATE-END']
+            DATE_AVE = get_mean_date(DATE_BEG, DATE_END)
 
             # Initialize dictionary for per band
-            if BAND not in dates:
+            if BAND not in dates_beg:
                 LOGGER.debug(f"Initializing dates/flux for {BAND}")
-                dates[BAND] = {}
+                dates_ave[BAND] = {}
+                dates_beg[BAND] = {}
+                dates_end[BAND] = {}
                 flux_SCI[BAND] = {}
                 flux_WGT[BAND] = {}
 
             # Initialize dictionary for nested dict for filetype
-            for band in dates.keys():
-                if FILETYPE not in dates[band]:
+            for band in dates_beg.keys():
+                if FILETYPE not in dates_beg[band]:
                     LOGGER.debug(f"Initializing dates/flux for {band}/{FILETYPE}")
-                    dates[band][FILETYPE] = []
+                    dates_ave[band][FILETYPE] = []
+                    dates_beg[band][FILETYPE] = []
+                    dates_end[band][FILETYPE] = []
                     flux_SCI[band][FILETYPE] = []
                     flux_WGT[band][FILETYPE] = []
 
             # Get the date and store in list for [band][filter]
-            dates[BAND][FILETYPE].append(DATE_BEG)
+            dates_ave[BAND][FILETYPE].append(DATE_AVE)
+            dates_beg[BAND][FILETYPE].append(DATE_BEG)
+            dates_end[BAND][FILETYPE].append(DATE_END)
             # Store data in list keyed to filetype
 
             # Get the index for objID
@@ -738,7 +775,10 @@ def repack_lightcurve(lightcurve, args):
         # Put everything into a main dictionary, only if we get any hits
         if len(flux_WGT) > 0:
             LC[objID] = {}
-            LC[objID]['dates'] = dates
+            LC[objID]['dates_ave'] = dates_ave
+            # In case we want to add them in the future
+            # LC[objID]['dates_beg'] = dates_beg
+            # LC[objID]['dates_end'] = dates_end
             LC[objID]['flux_SCI'] = flux_SCI
             LC[objID]['flux_WGT'] = flux_WGT
 
@@ -842,7 +882,7 @@ def get_field_extent(
     """
     Get the extent of the given field.
     RA angles are always given between 0 and 360 degrees, with the left edge of
-    the field given first. Dec angles are given between -90 and 90 degrees, with
+    the field given first. Dec angles are given between -90 and 90 degrees,with
     the lower edge of the field given first.
     For example, the SPT-3G winter field "ra0hdec-44.75" has ra range (310, 50)
     degrees, and dec range (-47.5, -42) degrees.
