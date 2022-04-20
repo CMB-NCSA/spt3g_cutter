@@ -61,6 +61,8 @@ def cmdline():
                         help="Print version and exit")
     parser.add_argument("--get_uniform_coverage", action='store_true', default=False,
                         help="Get only objects within the uniform coverage")
+    parser.add_argument("--nofits", action='store_true', default=False,
+                        help="Do not create fits files for stamps")
 
     # Logging options (loglevel/log_format/log_format_date)
     if 'LOG_LEVEL' in os.environ:
@@ -158,6 +160,10 @@ def run(args):
         rejected_dict = None
         lightcurve_dict = None
 
+    # Create the outdir if it does not exists
+    if not os.path.exists(args.outdir):
+        os.makedirs(args.outdir, mode=0o755, exist_ok=True)
+
     # Loop over all files
     args.files = rec['FILE'].tolist()
     Nfiles = len(args.files)
@@ -170,7 +176,8 @@ def run(args):
         kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin', 'objID': args.objID,
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter,
               'get_lightcurve': args.get_lightcurve,
-              'get_uniform_coverage': args.get_uniform_coverage}
+              'get_uniform_coverage': args.get_uniform_coverage,
+              'nofits': args.nofits}
         if NP > 1:
             # Get result to catch exceptions later, after close()
             s = p.apply_async(cutterlib.fitscutter, args=ar, kwds=kw)
