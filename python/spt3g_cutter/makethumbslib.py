@@ -63,6 +63,21 @@ def cmdline():
                         help="Get only objects within the uniform coverage")
     parser.add_argument("--nofits", action='store_true', default=False,
                         help="Do not create fits files for stamps")
+    # Read options
+    parser.add_argument("--stage", action='store_true', default=False,
+                        help="Stage input files before operanting on them.")
+    parser.add_argument("--stage_path", action='store', default=None,
+                        help="Path for indirect write.")
+
+    if args.stage_path is None and args.stage is True:
+        if 'SPT3G_INGEST_STAGE_PATH' in os.environ:
+            args.stage_path = os.environ['SPT3G_INGEST_STAGE_PATH']
+        else:
+            args.stage_path = '/tmp'
+
+    # Define the prefix for staging input files
+    if args.stage:
+        args.stage_prefix = os.path.join(args.stage_path, 'spt3g_cutter-stage-')
 
     # Logging options (loglevel/log_format/log_format_date)
     if 'LOG_LEVEL' in os.environ:
@@ -177,7 +192,10 @@ def run(args):
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter,
               'get_lightcurve': args.get_lightcurve,
               'get_uniform_coverage': args.get_uniform_coverage,
-              'nofits': args.nofits}
+              'nofits': args.nofits,
+              'stage:': args.stage,
+              'stage_prefix': args.stage_prefix}
+
         if NP > 1:
             # Get result to catch exceptions later, after close()
             s = p.apply_async(cutterlib.fitscutter, args=ar, kwds=kw)
