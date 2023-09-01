@@ -349,6 +349,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
                prefix=PREFIX, outdir=None, clobber=True, logger=None, counter='',
                get_uniform_coverage=False, nofits=False,
                stage=False, stage_prefix='spt-dummy'):
+
     """
     Makes cutouts around ra, dec for a give xsize and ysize
     ra,dec can be scalars or lists/arrays

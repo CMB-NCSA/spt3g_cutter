@@ -193,7 +193,7 @@ def run(args):
               'get_lightcurve': args.get_lightcurve,
               'get_uniform_coverage': args.get_uniform_coverage,
               'nofits': args.nofits,
-              'stage:': args.stage,
+              'stage': args.stage,
               'stage_prefix': args.stage_prefix}
 
         if NP > 1:
