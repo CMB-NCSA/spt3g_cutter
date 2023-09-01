@@ -69,16 +69,6 @@ def cmdline():
     parser.add_argument("--stage_path", action='store', default=None,
                         help="Path for indirect write.")
 
-    if args.stage_path is None and args.stage is True:
-        if 'SPT3G_INGEST_STAGE_PATH' in os.environ:
-            args.stage_path = os.environ['SPT3G_INGEST_STAGE_PATH']
-        else:
-            args.stage_path = '/tmp'
-
-    # Define the prefix for staging input files
-    if args.stage:
-        args.stage_prefix = os.path.join(args.stage_path, 'spt3g_cutter-stage-')
-
     # Logging options (loglevel/log_format/log_format_date)
     if 'LOG_LEVEL' in os.environ:
         default_log_level = os.environ['LOG_LEVEL']
@@ -116,6 +106,16 @@ def cmdline():
         pass
     else:
         raise ValueError('Both --date_start and --date_end must be defined')
+
+    if args.stage_path is None and args.stage is True:
+        if 'SPT3G_INGEST_STAGE_PATH' in os.environ:
+            args.stage_path = os.environ['SPT3G_INGEST_STAGE_PATH']
+        else:
+            args.stage_path = '/tmp'
+
+    # Define the prefix for staging input files
+    if args.stage:
+        args.stage_prefix = os.path.join(args.stage_path, 'spt3g_cutter-stage-')
 
     return args
 
