@@ -107,7 +107,7 @@ def cmdline():
     else:
         raise ValueError('Both --date_start and --date_end must be defined')
 
-    if args.stage_path is None and args.stage is True:
+    if args.stage_path is None and args.nostage is False:
         if 'SPT3G_INGEST_STAGE_PATH' in os.environ:
             args.stage_path = os.environ['SPT3G_INGEST_STAGE_PATH']
         else:
