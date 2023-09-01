@@ -597,7 +597,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
         # Skip the fits part if notfits is true
         if nofits:
-            LOGGER.info(f"Skiping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
+            LOGGER.info(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
             continue
 
         # Get the basedir

@@ -64,7 +64,7 @@ def cmdline():
     parser.add_argument("--nofits", action='store_true', default=False,
                         help="Do not create fits files for stamps")
     # Read options
-    parser.add_argument("--stage", action='store_true', default=False,
+    parser.add_argument("--nostage", action='store_true', default=False,
                         help="Stage input files before operanting on them.")
     parser.add_argument("--stage_path", action='store', default=None,
                         help="Path for indirect write.")
@@ -114,9 +114,11 @@ def cmdline():
             args.stage_path = '/tmp'
 
     # Define the prefix for staging input files
-    if args.stage:
+    if args.nostage is False:
+        args.stage = True
         args.stage_prefix = os.path.join(args.stage_path, 'spt3g_cutter-stage-')
-
+    else:
+        args.stage = False
     return args
 
 
