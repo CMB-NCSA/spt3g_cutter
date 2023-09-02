@@ -26,6 +26,9 @@ import subprocess
 import numpy as np
 import pandas
 import dateutil
+from tempfile import mkdtemp
+import errno
+import shutil
 
 core_G3Units_deg = 0.017453292519943295
 core_G3Units_rad = 1
@@ -344,7 +347,9 @@ def get_NP(MP):
 def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
                objID=None, xsize=1.0, ysize=1.0, units='arcmin', get_lightcurve=False,
                prefix=PREFIX, outdir=None, clobber=True, logger=None, counter='',
-               get_uniform_coverage=False, nofits=False):
+               get_uniform_coverage=False, nofits=False,
+               stage=False, stage_prefix='spt-dummy'):
+
     """
     Makes cutouts around ra, dec for a give xsize and ysize
     ra,dec can be scalars or lists/arrays
@@ -419,6 +424,11 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
     # Get header/extensions/hdu
     t0 = time.time()
+
+    # Stage if needed
+    if stage:
+        filename = stage_fitsfile(filename, stage_prefix=stage_prefix)
+
     header, hdunum = get_headers_hdus(filename)
     logger.debug(f"Done Getting header, hdus: {elapsed_time(t0)}")
     extnames = header.keys()  # Gets SCI and WGT
@@ -587,7 +597,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
         # Skip the fits part if notfits is true
         if nofits:
-            LOGGER.info(f"Skiping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
+            LOGGER.info(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
             continue
 
         # Get the basedir
@@ -627,6 +637,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     if len(rejected) > 0:
         rejected_positions[filename] = rejected
         logger.info(f"Rejected {len(rejected)} positions for {filename}")
+
+    if stage:
+        remove_staged_file(filename)
 
     return cutout_names, rejected_positions, lightcurve
 
@@ -1046,6 +1059,38 @@ def get_field_name(field):
     elif field in ["ecs-back", "sptpol-summer-back"]:
         field = "sptpol-ecs-back"
     return field
+
+
+def create_dir(dirname):
+    "Safely attempt to create a folder"
+    if not os.path.isdir(dirname):
+        LOGGER.info(f"Creating directory {dirname}")
+        try:
+            os.makedirs(dirname, mode=0o755, exist_ok=True)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                LOGGER.warning(f"Problem creating {dirname} -- proceeding with trepidation")
+
+
+def stage_fitsfile(fitsfile, stage_prefix="spt"):
+    """
+    Stage input fitsfile to the stage directory
+    """
+    tmp_dir = mkdtemp(prefix=stage_prefix)
+    fitsfile_copy = os.path.join(tmp_dir, os.path.basename(fitsfile))
+    LOGGER.info(f"Will stage: {fitsfile} --> {fitsfile_copy}")
+    # Make sure that the folder exists:
+    create_dir(os.path.dirname(fitsfile_copy))
+    shutil.copy2(fitsfile, fitsfile_copy)
+    return fitsfile_copy
+
+
+def remove_staged_file(fitsfile):
+    LOGGER.info(f"Removing: {fitsfile}")
+    os.remove(fitsfile)
+    tmp_dir = os.path.dirname(fitsfile)
+    LOGGER.info(f"Removing tmp dir: {tmp_dir}")
+    shutil.rmtree(tmp_dir)
 
 
 if __name__ == "__main__":
