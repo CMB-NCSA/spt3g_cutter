@@ -336,7 +336,7 @@ def get_NP(MP):
     # For it to be a integer
     MP = int(MP)
     if MP == 0:
-        NP = multiprocessing.cpu_count()
+        NP = int(0.6*multiprocessing.cpu_count())
     elif isinstance(MP, int):
         NP = MP
     else:
@@ -409,8 +409,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     # Check and fix inputs
     ra, dec, xsize, ysize, objID = check_inputs(ra, dec, xsize, ysize, objID)
 
-    logger.info(f"Working on FITS file: {filename} -- {counter}")
-    logger.info(f"Will cut: {len(ra)} stamps")
+    logger.info(f"Will cut: {len(ra)} stamps from FITS file: {filename} -- {counter}")
 
     # Check for the units
     if units == 'arcsec':
@@ -422,13 +421,12 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     else:
         raise Exception("ERROR: must define units as arcses/arcmin/degree only")
 
-    # Get header/extensions/hdu
-    t0 = time.time()
-
     # Stage if needed
     if stage:
         filename = stage_fitsfile(filename, stage_prefix=stage_prefix)
 
+    # Get header/extensions/hdu
+    t0 = time.time()
     header, hdunum = get_headers_hdus(filename)
     logger.debug(f"Done Getting header, hdus: {elapsed_time(t0)}")
     extnames = header.keys()  # Gets SCI and WGT
@@ -567,6 +565,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
         im_section = OrderedDict()
         h_section = OrderedDict()
+        LOGGER.debug(f"Working on object:{k} -- {objID[k]}")
         LOGGER.debug(f"Found naxis1,naxis2: {naxis1},{naxis2}")
         LOGGER.debug(f"Found x1,x2: {x1},{x2}")
         LOGGER.debug(f"Found y1,y2: {y1},{y2}")
@@ -597,7 +596,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
         # Skip the fits part if notfits is true
         if nofits:
-            LOGGER.info(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
+            LOGGER.debug(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
             continue
 
         # Get the basedir
@@ -619,9 +618,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
         logger.debug(f"Done writing {outname}: {elapsed_time(t0)}")
 
     ifits.close()
-    logger.info(f"Done {filename} in {elapsed_time(t1)} -- {counter}")
+    logger.info(f"Done filename: {filename} in {elapsed_time(t1)} -- {counter}")
 
-    # Assing internal lists/dict to managed dictionalks
+    # Assignig internal lists/dict to managed dictionaries
     cutout_names[filename] = outnames
     if get_lightcurve:
         # Remove the rejected ids from objID list,
@@ -640,6 +639,16 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
     if stage:
         remove_staged_file(filename)
+
+    # Clean up variables
+    del ifits
+    del outnames
+    del rejected
+    del lc_local
+    del rejected_ids
+    del data_extname
+    del im_section
+    del h_section
 
     return cutout_names, rejected_positions, lightcurve
 
