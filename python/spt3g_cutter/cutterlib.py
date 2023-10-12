@@ -336,7 +336,7 @@ def get_NP(MP):
     # For it to be a integer
     MP = int(MP)
     if MP == 0:
-        NP = int(0.6*multiprocessing.cpu_count())
+        NP = int(0.5*multiprocessing.cpu_count())
     elif isinstance(MP, int):
         NP = MP
     else:
