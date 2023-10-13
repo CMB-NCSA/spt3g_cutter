@@ -324,7 +324,7 @@ def get_headers_hdus(filename):
                 hdu['WGT'] = wgt_hdu
             except IOError:
                 LOGGER.warning(f"No WGT HDU for: {filename}")
-
+    fits.close()
     return header, hdu
 
 
@@ -336,7 +336,7 @@ def get_NP(MP):
     # For it to be a integer
     MP = int(MP)
     if MP == 0:
-        NP = int(0.5*multiprocessing.cpu_count())
+        NP = int(multiprocessing.cpu_count())
     elif isinstance(MP, int):
         NP = MP
     else:
@@ -524,6 +524,10 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
         if objID[k] is None:
             objID[k] = get_thumbBaseName(ra[k], dec[k], prefix=prefix)
 
+        # image and header sections
+        im_section = OrderedDict()
+        h_section = OrderedDict()
+
         # Define the geometry of the thumbnail
         x0, y0 = wcs.wcs_world2pix(ra[k], dec[k], 1)
         x0 = round(float(x0))
@@ -539,15 +543,15 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
 
         # Check if in field extent
         if get_uniform_coverage and not in_uniform_coverage(ra[k], dec[k], object):
-            LOGGER.warning(f"(RA,DEC):{ra[k]},{dec[k]} outside field extent")
+            LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} outside field extent")
             rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
             rejected_ids.append(objID[k])
             continue
 
         # Make sure the (x0,y0) is contained within the image
         if x0 < 0 or y0 < 0 or x0 > NAXIS1 or y0 > NAXIS2:
-            LOGGER.warning(f"(RA,DEC):{ra[k]},{dec[k]} outside {filename}")
-            LOGGER.warning(f"(x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
+            LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} outside {filename}")
+            LOGGER.debug(f"(x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
             rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
             rejected_ids.append(objID[k])
             continue
@@ -563,8 +567,6 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
         if x2 > NAXIS1:
             x2 = NAXIS1
 
-        im_section = OrderedDict()
-        h_section = OrderedDict()
         LOGGER.debug(f"Working on object:{k} -- {objID[k]}")
         LOGGER.debug(f"Found naxis1,naxis2: {naxis1},{naxis2}")
         LOGGER.debug(f"Found x1,x2: {x1},{x2}")
@@ -575,8 +577,14 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
             HDUNUM = hdunum[EXTNAME]
             # Append data from (x0, y0) pixel from EXTNAME
             if get_lightcurve:
-                data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
+                try:
+                    data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
+                except Exception as e:
+                    logger.error(e)
+                    # data_extname = get_lightcurve_data(filename,HDUNUM,x0,y0)
+                    data_extname = float("NaN")
                 lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
+                del data_extname
 
             # Skip the fits part if notfits is true
             if nofits:
@@ -626,7 +634,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
         # Remove the rejected ids from objID list,
         # Otherwise index search will fail
         for id in rejected_ids:
-            logger.warning(f"Removing rejected id:{id} from lightcurve[objID]")
+            logger.debug(f"Removing rejected id:{id} from lightcurve[objID]")
             objID.remove(id)
         # We add the objID array after we pruned it from rejected ids
         lc_local['objID'] = objID
@@ -646,11 +654,35 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     del rejected
     del lc_local
     del rejected_ids
-    del data_extname
     del im_section
     del h_section
 
     return cutout_names, rejected_positions, lightcurve
+
+
+def get_lightcurve_data(filename, HDUNUM, x0, y0, MAX_RETRIES=10):
+    # Back up method to access the information we need
+    retries = MAX_RETRIES
+    while retries > 0:
+        time.sleep(0.1)
+        try:
+            filename = stage_fitsfile(filename, stage_prefix='spt-dummy-', use_cp=True)
+            LOGGER.warning(f"Re-trying {retries} full read of {filename} for {x0}, {y0}")
+            image_data = fitsio.read(filename, ext=HDUNUM)
+            LOGGER.warning("Reading Done")
+            data_extname = image_data[int(y0), int(x0)]
+            del image_data
+            remove_staged_file(filename)
+            break
+        except Exception as error:
+            LOGGER.warning(f"Cannot re-read {filename}")
+            LOGGER.error(error)
+            retries -= 1
+
+    if retries == 0:
+        raise
+
+    return data_extname
 
 
 def get_id_names(ra, dec, prefix):
@@ -822,6 +854,7 @@ def get_rejected_ids(args):
 
 def write_lightcurve(args):
 
+    t0 = time.time()
     d = datetime.datetime.today()
     date = d.isoformat('T', 'seconds')
     comment = f"# Lightcurve file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
@@ -830,7 +863,7 @@ def write_lightcurve(args):
     with open(yaml_file, 'w') as lightcurve_file:
         lightcurve_file.write(comment)
         yaml.dump(args.lc, lightcurve_file, sort_keys=False, default_flow_style=False)
-    LOGGER.info(f"Wrote lightcurve file to: {yaml_file}")
+    LOGGER.info(f"Wrote lightcurve file to: {yaml_file} in {elapsed_time(t0)}")
 
 
 def write_manifest(args):
@@ -1081,7 +1114,7 @@ def create_dir(dirname):
                 LOGGER.warning(f"Problem creating {dirname} -- proceeding with trepidation")
 
 
-def stage_fitsfile(fitsfile, stage_prefix="spt"):
+def stage_fitsfile(fitsfile, stage_prefix="spt", use_cp=False):
     """
     Stage input fitsfile to the stage directory
     """
@@ -1090,7 +1123,12 @@ def stage_fitsfile(fitsfile, stage_prefix="spt"):
     LOGGER.info(f"Will stage: {fitsfile} --> {fitsfile_copy}")
     # Make sure that the folder exists:
     create_dir(os.path.dirname(fitsfile_copy))
-    shutil.copy2(fitsfile, fitsfile_copy)
+    if use_cp:
+        LOGGER.warning("Will use system copy call")
+        cmd = f"cp -pv {fitsfile} {fitsfile_copy}"
+        os.system(cmd)
+    else:
+        shutil.copy2(fitsfile, fitsfile_copy)
     return fitsfile_copy
 
 

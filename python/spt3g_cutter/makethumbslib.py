@@ -220,6 +220,9 @@ def run(args):
         rejected_pos = dict(rejected_dict)
         lightcurve = dict(lightcurve_dict)
 
+    # Time it took to just cut
+    logger.info(f"Grand cutting time: {cutterlib.elapsed_time(t0)}")
+
     # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
     args.rejected_positions = rejected_pos
