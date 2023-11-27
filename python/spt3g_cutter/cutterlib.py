@@ -139,7 +139,7 @@ def get_fits_hdu_extensions_byfilename(filename):
     return sci_hdu, wgt_hdu
 
 
-def update_wcs_matrix(header, x0, y0, naxis1, naxis2, ra, dec, proj='ZEA'):
+def update_wcs_matrix(header, x0, y0, proj='ZEA'):
     """
     Update the wcs header object with the right CRPIX[1, 2] CRVAL[1, 2] for a
     given subsection
@@ -160,37 +160,41 @@ def update_wcs_matrix(header, x0, y0, naxis1, naxis2, ra, dec, proj='ZEA'):
     h = copy.deepcopy(header)
     # Get the astropy.wcs object
     wcs = WCS(h)
-    # Recompute CRVAL1/2 on the new center x0,y0
-    CRVAL1, CRVAL2 = wcs.wcs_pix2world(x0, y0, 1)
-    # Recast numpy objects as floats
-    CRVAL1 = float(CRVAL1)
-    CRVAL2 = float(CRVAL2)
-    # Asign CRPIX1/2 on the new image
-    CRPIX1 = int(naxis1/2.0)
-    CRPIX2 = int(naxis2/2.0)
-    # Update the values
-    h['CRVAL1'] = CRVAL1
-    h['CRVAL2'] = CRVAL2
-    h['CRPIX1'] = CRPIX1
-    h['CRPIX2'] = CRPIX2
 
     if proj == 'TAN':
+        # Recompute CRVAL1/2 on the new center x0,y0
+        CRVAL1, CRVAL2 = wcs.wcs_pix2world(x0, y0, 1)
+        # Recast numpy objects as floats
+        CRVAL1 = float(CRVAL1)
+        CRVAL2 = float(CRVAL2)
+        # Asign CRPIX1/2 on the new image
+        CRPIX1 = 1
+        CRPIX2 = 1
+        # Update the values
+        h['CRVAL1'] = CRVAL1
+        h['CRVAL2'] = CRVAL2
+        h['CRPIX1'] = CRPIX1
+        h['CRPIX2'] = CRPIX2
         h['CTYPE1'] = 'RA---TAN'
         h['CTYPE2'] = 'DEC--TAN'
         # Delete some key that are not needed
         dkeys = ['PROJ', 'LONPOLE', 'LATPOLE', 'POLAR', 'ALPHA0', 'DELTA0', 'X0', 'Y0']
         for k in dkeys:
             h.delete(k)
+
     elif proj == 'ZEA':
-        h['LATPOLE'] = CRVAL2
+        CRPIX1 = float(h['CRPIX1']) - x0
+        CRPIX2 = float(h['CRPIX2']) - y0
+        # Delete some key that are not needed
+        dkeys = ['PROJ', 'POLAR', 'ALPHA0', 'DELTA0', 'X0', 'Y0']
+        for k in dkeys:
+            h.delete(k)
+        h['CRPIX1'] = CRPIX1
+        h['CRPIX2'] = CRPIX2
+        LOGGER.debug(f"Update to CRPIX1:{CRPIX1}, CRPIX2:{CRPIX2}")
+
     else:
         raise NameError(f"Projection: {proj} not implemented")
-
-    # New record for RA/DEC center
-    recs = [{'name': 'racut', 'value': ra, 'comment': 'RA of cutout'},
-            {'name': 'deccut', 'value': dec, 'comment': 'DEC of cutout'}]
-    for rec in recs:
-        h.add_record(rec)
 
     return h
 
@@ -597,7 +601,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
             naxis1 = numpy.shape(im_section[EXTNAME])[1]
             naxis2 = numpy.shape(im_section[EXTNAME])[0]
             # Update the WCS in the headers and make a copy
-            h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x0, y0, naxis1, naxis2, ra[k], dec[k])
+            h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x1, y1)
             # Add the objID to the header of the thumbnail
             rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
             h_section[EXTNAME].add_record(rec)
@@ -779,7 +783,7 @@ def repack_lightcurve(lightcurve, args):
         for obs in lightcurve:
 
             if objID in lightcurve[obs]['rejected_ids']:
-                LOGGER.warning(f"Ignoring {objID} for {obs} -- rejected")
+                LOGGER.debug(f"Ignoring {objID} for {obs} -- rejected")
                 continue
 
             # Get filetype and band
