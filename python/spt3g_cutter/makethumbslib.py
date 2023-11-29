@@ -233,9 +233,24 @@ def run(args):
     args = cutterlib.capture_job_metadata(args)
 
     if args.get_lightcurve:
-        args.lc = cutterlib.repack_lightcurve(lightcurve, args)
-        cutterlib.write_lightcurve(args)
-        logger.info("Done with lightcurve")
+        # Create new pool
+        if NP > 1:
+            p = mp.Pool(processes=NP)
+        for BAND in args.bands:
+            for FILETYPE in args.filetypes:
+                ar = (lightcurve, BAND, FILETYPE, args)
+                if NP > 1:
+                    s = p.apply_async(cutterlib.repack_lightcurve_band_filetype, args=ar)
+                    results.append(s)
+                else:
+                    cutterlib.repack_lightcurve_band_filetype(*ar)
+
+        if NP > 1:
+            p.close()
+            # Check for exceptions
+            for r in results:
+                r.get()
+            p.join()
 
     # Write the manifest yaml file
     cutterlib.write_manifest(args)

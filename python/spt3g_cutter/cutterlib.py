@@ -585,7 +585,6 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
                     data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
                 except Exception as e:
                     logger.error(e)
-                    # data_extname = get_lightcurve_data(filename,HDUNUM,x0,y0)
                     data_extname = float("NaN")
                 lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
                 del data_extname
@@ -632,7 +631,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     ifits.close()
     logger.info(f"Done filename: {filename} in {elapsed_time(t1)} -- {counter}")
 
-    # Assignig internal lists/dict to managed dictionaries
+    # Assigning internal lists/dict to managed dictionaries
     cutout_names[filename] = outnames
     if get_lightcurve:
         # Remove the rejected ids from objID list,
@@ -662,31 +661,6 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     del h_section
 
     return cutout_names, rejected_positions, lightcurve
-
-
-def get_lightcurve_data(filename, HDUNUM, x0, y0, MAX_RETRIES=10):
-    # Back up method to access the information we need
-    retries = MAX_RETRIES
-    while retries > 0:
-        time.sleep(0.1)
-        try:
-            filename = stage_fitsfile(filename, stage_prefix='spt-dummy-', use_cp=True)
-            LOGGER.warning(f"Re-trying {retries} full read of {filename} for {x0}, {y0}")
-            image_data = fitsio.read(filename, ext=HDUNUM)
-            LOGGER.warning("Reading Done")
-            data_extname = image_data[int(y0), int(x0)]
-            del image_data
-            remove_staged_file(filename)
-            break
-        except Exception as error:
-            LOGGER.warning(f"Cannot re-read {filename}")
-            LOGGER.error(error)
-            retries -= 1
-
-    if retries == 0:
-        raise
-
-    return data_extname
 
 
 def get_id_names(ra, dec, prefix):
@@ -766,6 +740,67 @@ def get_mean_date(date1, date2):
     except (TypeError, dateutil.parser._parser.ParserError):
         date_mean = date1
     return date_mean
+
+
+def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
+    "Repack the lightcurve dictionary keyed by objID"
+
+    t0 = time.time()
+    LOGGER.info(f"Repacking lightcurve information for {BAND}, {FILETYPE}")
+    LC = {}
+    for objID in args.id_names:
+
+        dates_ave = []
+        dates_beg = []
+        dates_end = []
+        flux_SCI = []
+        flux_WGT = []
+        # Loop over the observations (OBS-ID + filetype)
+        for obs in lightcurve:
+
+            if objID in lightcurve[obs]['rejected_ids']:
+                LOGGER.debug(f"Ignoring {objID} for {obs} -- rejected")
+                continue
+
+            # Only proceed if matching filetype and band
+            if lightcurve[obs]['BAND'] != BAND or lightcurve[obs]['FILETYPE'] != FILETYPE:
+                continue
+
+            DATE_BEG = lightcurve[obs]['DATE-BEG']
+            DATE_END = lightcurve[obs]['DATE-END']
+            DATE_AVE = get_mean_date(DATE_BEG, DATE_END)
+
+            # Get the date and store in list for [band][filter]
+            dates_ave.append(DATE_AVE)
+            dates_beg.append(DATE_BEG)
+            dates_end.append(DATE_END)
+            # Store data in list keyed to filetype
+
+            # Get the index for objID
+            idx = lightcurve[obs]['objID'].index(objID)
+            flux_sci = lightcurve[obs]['flux_SCI'][idx]
+            flux_SCI.append(flux_sci)
+            try:
+                flux_wgt = lightcurve[obs]['flux_WGT'][idx]
+            except KeyError:
+                flux_wgt = None
+                LOGGER.warning(f"NO flux_WGT - obs:{objID} date:{DATE_BEG} BAND:{BAND} FILETYPE: {FILETYPE}")
+
+            flux_WGT.append(flux_wgt)
+
+        # Put everything into a main dictionary, only if we get any hits
+        if len(flux_WGT) > 0:
+            LC[objID] = {}
+            LC[objID]['dates_ave'] = dates_ave
+            # In case we want to add them in the future
+            # LC[objID]['dates_beg'] = dates_beg
+            # LC[objID]['dates_end'] = dates_end
+            LC[objID]['flux_SCI'] = flux_SCI
+            LC[objID]['flux_WGT'] = flux_WGT
+
+    LOGGER.info(f"Done Re-packed lightcurve for {BAND}/{FILETYPE} in: {elapsed_time(t0)}")
+    write_lightcurve_band_filetype(LC, BAND, FILETYPE, args)
+    return LC
 
 
 def repack_lightcurve(lightcurve, args):
@@ -856,6 +891,19 @@ def get_rejected_ids(args):
     return rejected_ids
 
 
+def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
+
+    t0 = time.time()
+    d = datetime.datetime.today()
+    date = d.isoformat('T', 'seconds')
+    comment = f"# Lightcurve file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
+    yaml_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.yaml")
+    with open(yaml_file, 'w') as lightcurve_file:
+        lightcurve_file.write(comment)
+        yaml.dump(lc, lightcurve_file, sort_keys=False, default_flow_style=False)
+    LOGGER.info(f"Wrote lightcurve file to: {yaml_file} in: {elapsed_time(t0)}")
+
+
 def write_lightcurve(args):
 
     t0 = time.time()
@@ -867,7 +915,7 @@ def write_lightcurve(args):
     with open(yaml_file, 'w') as lightcurve_file:
         lightcurve_file.write(comment)
         yaml.dump(args.lc, lightcurve_file, sort_keys=False, default_flow_style=False)
-    LOGGER.info(f"Wrote lightcurve file to: {yaml_file} in {elapsed_time(t0)}")
+    LOGGER.info(f"Wrote lightcurve file to: {yaml_file} in: {elapsed_time(t0)}")
 
 
 def write_manifest(args):
@@ -880,6 +928,7 @@ def write_manifest(args):
                'rejected_positions', 'input_positions']
     manifest = {}
 
+    t0 = time.time()
     d = args.__dict__
     for key in ordered:
         manifest[key] = d[key]
@@ -892,7 +941,7 @@ def write_manifest(args):
     with open(yaml_file, 'w') as manifest_file:
         manifest_file.write(comment)
         yaml.dump(manifest, manifest_file, sort_keys=False, default_flow_style=False)
-    LOGGER.info(f"Wrote manifest file to: {yaml_file}")
+    LOGGER.info(f"Wrote manifest file to: {yaml_file} in: {elapsed_time(t0)}")
 
 
 def in_uniform_coverage(ra, dec, field):
