@@ -673,12 +673,14 @@ def get_id_names(ra, dec, prefix):
 
 def get_size_on_disk(outdir, timeout=15):
     "Get the size of the outdir outputs"
+    t0 = time.time()
     LOGGER.info(f"Getting size_on_disk with timeout={timeout}s.")
     try:
         size = subprocess.check_output(['du', '-sh', outdir], timeout=timeout).split()[0].decode('ascii')
     except subprocess.TimeoutExpired:
         LOGGER.warning(f"Cannot get_size_on_disk, timeout after {timeout}s.")
         size = f"Timed out: {timeout} sec, too large to compute"
+    LOGGER.info(f"Done size_on_disk in: {elapsed_time(t0)}")
     return size
 
 
@@ -722,7 +724,8 @@ def capture_job_metadata(args):
     args.cutout_files = cutout_files
 
     # Get the size on disk
-    args.size_on_disk = get_size_on_disk(args.outdir)
+    #args.size_on_disk = get_size_on_disk(args.outdir)
+    args.size_on_disk = None
     args.files_on_disk = len(args.cutout_files)
 
     # Get the job information from k8s
@@ -742,11 +745,32 @@ def get_mean_date(date1, date2):
     return date_mean
 
 
+def get_obs_dictionary(lightcurve):
+    "Create a dictionary of obervations keyed to BAND and FILETYPE"
+
+    LOGGER.info("Creating dictionary with observations")
+    obs_dict = {}
+    for obs in lightcurve:
+        FILETYPE = lightcurve[obs]['FILETYPE']
+        BAND = lightcurve[obs]['BAND']
+
+        if BAND not in obs_dict:
+            obs_dict[BAND] = {}
+            if FILETYPE not in obs_dict[BAND]:
+                obs_dict[BAND][FILETYPE] = []
+        obs_dict[BAND][FILETYPE].append(obs)
+    return obs_dict
+
+
 def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
     "Repack the lightcurve dictionary keyed by objID"
 
     t0 = time.time()
     LOGGER.info(f"Repacking lightcurve information for {BAND}, {FILETYPE}")
+
+    # Select only the observation for the BAND/FILETYPE combination
+    observations = args.obs_dict[BAND][FILETYPE]
+
     LC = {}
     for objID in args.id_names:
 
@@ -756,14 +780,10 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
         flux_SCI = []
         flux_WGT = []
         # Loop over the observations (OBS-ID + filetype)
-        for obs in lightcurve:
+        for obs in observations:
 
             if objID in lightcurve[obs]['rejected_ids']:
                 LOGGER.debug(f"Ignoring {objID} for {obs} -- rejected")
-                continue
-
-            # Only proceed if matching filetype and band
-            if lightcurve[obs]['BAND'] != BAND or lightcurve[obs]['FILETYPE'] != FILETYPE:
                 continue
 
             DATE_BEG = lightcurve[obs]['DATE-BEG']
@@ -894,14 +914,21 @@ def get_rejected_ids(args):
 def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
 
     t0 = time.time()
-    d = datetime.datetime.today()
-    date = d.isoformat('T', 'seconds')
-    comment = f"# Lightcurve file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
-    yaml_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.yaml")
-    with open(yaml_file, 'w') as lightcurve_file:
-        lightcurve_file.write(comment)
-        yaml.dump(lc, lightcurve_file, sort_keys=False, default_flow_style=False)
-    LOGGER.info(f"Wrote lightcurve file to: {yaml_file} in: {elapsed_time(t0)}")
+    # d = datetime.datetime.today()
+    # date = d.isoformat('T', 'seconds')
+    # comment = f"# Lightcurve file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
+
+    json_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.json")
+    LOGGER.info(f"writing lightcurve to: {json_file}")
+    df = pandas.DataFrame.from_dict(lc, orient='index')
+    df.to_json(json_file, orient='index')
+    LOGGER.info(f"Wrote lightcurve file to: {json_file} in: {elapsed_time(t0)}")
+
+    # yaml_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.yaml")
+    # with open(yaml_file, 'w') as lightcurve_file:
+    #     lightcurve_file.write(comment)
+    #    yaml.dump(lc, lightcurve_file, sort_keys=False, default_flow_style=False)
+    # LOGGER.info(f"Wrote lightcurve file to: {yaml_file} in: {elapsed_time(t0)}")
 
 
 def write_lightcurve(args):

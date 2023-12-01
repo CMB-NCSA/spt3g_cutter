@@ -214,14 +214,16 @@ def run(args):
         for r in results:
             r.get()
         p.join()
+        p.terminate()
 
         # Update with returned dictionary
         cutout_names = dict(cutout_dict)
         rejected_pos = dict(rejected_dict)
         lightcurve = dict(lightcurve_dict)
+        del p
 
     # Time it took to just cut
-    logger.info(f"Grand cutting time: {cutterlib.elapsed_time(t0)}")
+    logger.info(f"Total cutting time: {cutterlib.elapsed_time(t0)}")
 
     # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
@@ -232,8 +234,19 @@ def run(args):
 
     args = cutterlib.capture_job_metadata(args)
 
+    # Clean up
+    del manager
+    del cutout_names
+    del cutout_dict
+    del rejected_pos
+    del rejected_dict
+    del lightcurve_dict
+
+    args.obs_dict = cutterlib.get_obs_dictionary(lightcurve)
+
     if args.get_lightcurve:
         # Create new pool
+        NP = 1
         if NP > 1:
             p = mp.Pool(processes=NP)
         for BAND in args.bands:
