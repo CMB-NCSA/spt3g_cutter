@@ -29,6 +29,7 @@ import dateutil
 from tempfile import mkdtemp
 import errno
 import shutil
+import psutil
 
 core_G3Units_deg = 0.017453292519943295
 core_G3Units_rad = 1
@@ -767,6 +768,9 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
 
     t0 = time.time()
     LOGGER.info(f"Repacking lightcurve information for {BAND}, {FILETYPE}")
+    LOGGER.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
+    process = psutil.Process(os.getpid())
+    LOGGER.info(f"Memory percent: {process.memory_percent()} %")
 
     # Select only the observation for the BAND/FILETYPE combination
     observations = args.obs_dict[BAND][FILETYPE]
@@ -914,9 +918,9 @@ def get_rejected_ids(args):
 def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
 
     t0 = time.time()
-    # d = datetime.datetime.today()
-    # date = d.isoformat('T', 'seconds')
-    # comment = f"# Lightcurve file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
+    #d = datetime.datetime.today()
+    #date = d.isoformat('T', 'seconds')
+    #comment = f"# Lightcurve file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
 
     json_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.json")
     LOGGER.info(f"writing lightcurve to: {json_file}")
@@ -924,11 +928,11 @@ def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
     df.to_json(json_file, orient='index')
     LOGGER.info(f"Wrote lightcurve file to: {json_file} in: {elapsed_time(t0)}")
 
-    # yaml_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.yaml")
-    # with open(yaml_file, 'w') as lightcurve_file:
-    #     lightcurve_file.write(comment)
+    #yaml_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.yaml")
+    #with open(yaml_file, 'w') as lightcurve_file:
+    #    lightcurve_file.write(comment)
     #    yaml.dump(lc, lightcurve_file, sort_keys=False, default_flow_style=False)
-    # LOGGER.info(f"Wrote lightcurve file to: {yaml_file} in: {elapsed_time(t0)}")
+    #LOGGER.info(f"Wrote lightcurve file to: {yaml_file} in: {elapsed_time(t0)}")
 
 
 def write_lightcurve(args):

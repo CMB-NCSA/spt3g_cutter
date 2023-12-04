@@ -9,7 +9,7 @@ import spt3g_cutter
 import spt3g_cutter.fitsfinder as fitsfinder
 import spt3g_cutter.cutterlib as cutterlib
 import os
-
+import psutil
 
 def cmdline():
 
@@ -20,7 +20,7 @@ def cmdline():
     args, remaining_argv = conf_parser.parse_known_args()
     # If we have -c or --config, then we proceed to read it
     if args.configfile:
-        conf_defaults = parse_config(args.configfile)
+        conf_dpythefaults = parse_config(args.configfile)
     else:
         conf_defaults = {}
 
@@ -234,6 +234,11 @@ def run(args):
 
     args = cutterlib.capture_job_metadata(args)
 
+    # Report total memory usage
+    logger.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
+    process = psutil.Process(os.getpid())
+    logger.info(f"Memory percent: {process.memory_percent()} %")
+
     # Clean up
     del manager
     del cutout_names
@@ -242,28 +247,23 @@ def run(args):
     del rejected_dict
     del lightcurve_dict
 
+    logger.info(f"Size of lightcurve: {sys.getsizeof(lightcurve)/1024/1024}")
+
     args.obs_dict = cutterlib.get_obs_dictionary(lightcurve)
+    logger.info(f"Size of args.obs_dict: {sys.getsizeof(args.obs_dict)/1024/1024}")
+
+    # Report total memory usage
+    logger.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
+    process = psutil.Process(os.getpid())
+    logger.info(f"Memory percent: {process.memory_percent()} %")
 
     if args.get_lightcurve:
-        # Create new pool
-        NP = 1
-        if NP > 1:
-            p = mp.Pool(processes=NP)
         for BAND in args.bands:
             for FILETYPE in args.filetypes:
-                ar = (lightcurve, BAND, FILETYPE, args)
-                if NP > 1:
-                    s = p.apply_async(cutterlib.repack_lightcurve_band_filetype, args=ar)
-                    results.append(s)
-                else:
-                    cutterlib.repack_lightcurve_band_filetype(*ar)
-
-        if NP > 1:
-            p.close()
-            # Check for exceptions
-            for r in results:
-                r.get()
-            p.join()
+                logger.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
+                process = psutil.Process(os.getpid())
+                logger.info(f"Memory percent: {process.memory_percent()} %")
+                cutterlib.repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args)
 
     # Write the manifest yaml file
     cutterlib.write_manifest(args)
