@@ -786,7 +786,10 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
         # Loop over the observations (OBS-ID + filetype)
         for obs in observations:
 
-            if objID in lightcurve[obs]['rejected_ids']:
+            print(obs, lightcurve.rejected_ids.values[obs:])
+            exit()
+
+            if objID in lightcurve[obs]['rejected_ids'].values:
                 LOGGER.debug(f"Ignoring {objID} for {obs} -- rejected")
                 continue
 
@@ -823,7 +826,7 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
             LC[objID]['flux_WGT'] = flux_WGT
 
     LOGGER.info(f"Done Re-packed lightcurve for {BAND}/{FILETYPE} in: {elapsed_time(t0)}")
-    write_lightcurve_band_filetype(LC, BAND, FILETYPE, args)
+    # write_lightcurve_band_filetype(LC, BAND, FILETYPE, args)
     return LC
 
 
@@ -923,7 +926,7 @@ def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
     #comment = f"# Lightcurve file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
 
     json_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.json")
-    LOGGER.info(f"writing lightcurve to: {json_file}")
+    LOGGER.info(f"Writing lightcurve to: {json_file}")
     df = pandas.DataFrame.from_dict(lc, orient='index')
     df.to_json(json_file, orient='index')
     LOGGER.info(f"Wrote lightcurve file to: {json_file} in: {elapsed_time(t0)}")

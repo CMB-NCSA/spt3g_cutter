@@ -247,9 +247,16 @@ def run(args):
     del rejected_dict
     del lightcurve_dict
 
+    # Get the observations dictionary
+    args.obs_dict = cutterlib.get_obs_dictionary(lightcurve)
     logger.info(f"Size of lightcurve: {sys.getsizeof(lightcurve)/1024/1024}")
 
-    args.obs_dict = cutterlib.get_obs_dictionary(lightcurve)
+    # Transform lightcurve to a pandas df
+    lightcurve_df = pandas.DataFrame.from_dict(lightcurve, orient='index')
+    logger.info(f"Size of df: {sys.getsizeof(lightcurve_df)/1024/1024}")
+    del lightcurve
+    print(lightcurve_df)
+
     logger.info(f"Size of args.obs_dict: {sys.getsizeof(args.obs_dict)/1024/1024}")
 
     # Report total memory usage
@@ -263,7 +270,8 @@ def run(args):
                 logger.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
                 process = psutil.Process(os.getpid())
                 logger.info(f"Memory percent: {process.memory_percent()} %")
-                cutterlib.repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args)
+                lc = cutterlib.repack_lightcurve_band_filetype(lightcurve_df, BAND, FILETYPE, args)
+                cutterlib.write_lightcurve_band_filetype(lc, BAND, FILETYPE, args)
 
     # Write the manifest yaml file
     cutterlib.write_manifest(args)
