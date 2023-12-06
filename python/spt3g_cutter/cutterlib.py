@@ -786,10 +786,7 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
         # Loop over the observations (OBS-ID + filetype)
         for obs in observations:
 
-            print(obs, lightcurve.rejected_ids.values[obs:])
-            exit()
-
-            if objID in lightcurve[obs]['rejected_ids'].values:
+            if objID in lightcurve[obs]['rejected_ids']:
                 LOGGER.debug(f"Ignoring {objID} for {obs} -- rejected")
                 continue
 
@@ -826,8 +823,8 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
             LC[objID]['flux_WGT'] = flux_WGT
 
     LOGGER.info(f"Done Re-packed lightcurve for {BAND}/{FILETYPE} in: {elapsed_time(t0)}")
-    # write_lightcurve_band_filetype(LC, BAND, FILETYPE, args)
-    return LC
+    write_lightcurve_band_filetype(LC, BAND, FILETYPE, args)
+    return
 
 
 def repack_lightcurve(lightcurve, args):
