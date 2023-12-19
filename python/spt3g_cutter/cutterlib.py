@@ -30,6 +30,8 @@ from tempfile import mkdtemp
 import errno
 import shutil
 import psutil
+from astropy.io import fits
+from astropy.time import Time
 
 core_G3Units_deg = 0.017453292519943295
 core_G3Units_rad = 1
@@ -743,6 +745,7 @@ def get_mean_date(date1, date2):
         date_mean = pandas.Timestamp((D1.value + D2.value)/2.).isoformat()
     except (TypeError, dateutil.parser._parser.ParserError):
         date_mean = date1
+        #LOGGER.warning(f"Ran into yearly  map: {date1}") ## add a warning for getting yearly map if required. This should not be in the light curve
     return date_mean
 
 
@@ -793,34 +796,46 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
             DATE_BEG = lightcurve[obs]['DATE-BEG']
             DATE_END = lightcurve[obs]['DATE-END']
             DATE_AVE = get_mean_date(DATE_BEG, DATE_END)
-
+            if DATE_AVE.find('yearly') != -1:
+                #LOGGER.warning(f"Ignoring {objID} for {obs} -- yearly map")
+                continue
             # Get the date and store in list for [band][filter]
-            dates_ave.append(DATE_AVE)
-            dates_beg.append(DATE_BEG)
-            dates_end.append(DATE_END)
-            # Store data in list keyed to filetype
+            #dates_ave.append(DATE_AVE)
+            #dates_beg.append(DATE_BEG)
+            #dates_end.append(DATE_END)
+            # Store data in list keyed to filetype, moving the storing to dictionary only if weight and flux exists
 
             # Get the index for objID
             idx = lightcurve[obs]['objID'].index(objID)
-            flux_sci = lightcurve[obs]['flux_SCI'][idx]
-            flux_SCI.append(flux_sci)
+            #flux_sci = lightcurve[obs]['flux_SCI'][idx]
+            #flux_SCI.append(flux_sci)
             try:
                 flux_wgt = lightcurve[obs]['flux_WGT'][idx]
+                if flux_wgt > 0:
+                    flux_WGT.append(flux_wgt)
+                    #storing dates
+                    dates_ave.append(DATE_AVE)
+                    dates_beg.append(DATE_BEG)
+                    dates_end.append(DATE_END)
+                    #storing flux
+                    flux_sci = lightcurve[obs]['flux_SCI'][idx]
+                    flux_SCI.append(flux_sci)
             except KeyError:
                 flux_wgt = None
                 LOGGER.warning(f"NO flux_WGT - obs:{objID} date:{DATE_BEG} BAND:{BAND} FILETYPE: {FILETYPE}")
 
-            flux_WGT.append(flux_wgt)
+            #flux_WGT.append(flux_wgt) commented out since things are saved earlier
 
-        # Put everything into a main dictionary, only if we get any hits
+        # Put everything into a main dictionary, only if we get any hits ## since now zero weights have been removed, need to be smarter to include the objID into rejected for lightcurve. Talk to Felipe about this.
         if len(flux_WGT) > 0:
             LC[objID] = {}
-            LC[objID]['dates_ave'] = dates_ave
+            LC[objID]['id'] = objID
+            LC[objID]['dates_ave_'+BAND] = Time(dates_ave).mjd     # converting the date array to mjd
             # In case we want to add them in the future
             # LC[objID]['dates_beg'] = dates_beg
             # LC[objID]['dates_end'] = dates_end
-            LC[objID]['flux_SCI'] = flux_SCI
-            LC[objID]['flux_WGT'] = flux_WGT
+            LC[objID]['flux_SCI_'+BAND] = flux_SCI
+            LC[objID]['flux_WGT_'+BAND] = flux_WGT
 
     LOGGER.info(f"Done Re-packed lightcurve for {BAND}/{FILETYPE} in: {elapsed_time(t0)}")
     write_lightcurve_band_filetype(LC, BAND, FILETYPE, args)
@@ -922,17 +937,33 @@ def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
     #date = d.isoformat('T', 'seconds')
     #comment = f"# Lightcurve file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
 
-    json_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.json")
-    LOGGER.info(f"Writing lightcurve to: {json_file}")
-    df = pandas.DataFrame.from_dict(lc, orient='index')
-    df.to_json(json_file, orient='index')
-    LOGGER.info(f"Wrote lightcurve file to: {json_file} in: {elapsed_time(t0)}")
+    #json_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.json")
+    #LOGGER.info(f"Writing lightcurve to: {json_file}")
+    #df = pandas.DataFrame.from_dict(lc, orient='index')
+    #df.to_json(json_file, orient='index')
+    #LOGGER.info(f"Wrote lightcurve file to: {json_file} in: {elapsed_time(t0)}")
 
     #yaml_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.yaml")
     #with open(yaml_file, 'w') as lightcurve_file:
     #    lightcurve_file.write(comment)
     #    yaml.dump(lc, lightcurve_file, sort_keys=False, default_flow_style=False)
     #LOGGER.info(f"Wrote lightcurve file to: {yaml_file} in: {elapsed_time(t0)}")
+
+    #fits table writer, currently not much information in the header
+    max_epochs = 10000  #this has maximum number of epochs as 10k for fits table format
+    fits_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.fits")
+    LOGGER.info(f"Writing lightcurve to: {fits_file}")
+    #Nested dictionaries cannot be sliced, so going through pandas route :(
+    df = pandas.DataFrame.from_dict(lc, orient='index') #re-orienting
+    dict = df.to_dict() ##need to check if there is a better way
+    LOGGER.info(f"Converted dictionary to pandas and back in: {elapsed_time(t0)}")
+    col1 = fits.Column(name='id', format='30A', array=list(dict['id'].values())) #max length for id is 30 charachters
+    col2 = fits.Column(name='dates_ave_'+BAND, format='PD(10000)', array=list(dict['dates_ave_'+BAND].values()),unit='MJD') 
+    col3 = fits.Column(name='flux_SCI_'+BAND, format='PD(10000)', array=list(dict['flux_SCI_'+BAND].values()),unit='mJy')
+    col4 = fits.Column(name='flux_WGT_'+BAND, format='PD(10000)', array=list(dict['flux_WGT_'+BAND].values()))
+    hdu = fits.BinTableHDU.from_columns([col1, col2, col3, col4])
+    hdu.writeto(fits_file,overwrite=True)
+    LOGGER.info(f"Wrote lightcurve file to: {fits_file} in: {elapsed_time(t0)}")
 
 
 def write_lightcurve(args):
