@@ -32,6 +32,7 @@ import shutil
 import psutil
 from astropy.io import fits
 from astropy.time import Time
+import json
 
 core_G3Units_deg = 0.017453292519943295
 core_G3Units_rad = 1
@@ -885,7 +886,7 @@ def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
     LOGGER.debug(f"Converted dictionary to pandas and back in: {elapsed_time(t0)}")
     col1 = fits.Column(name='id', format='30A', array=np.array(list(dict['id'].values()), dtype=object))
     col2 = fits.Column(name='dates_ave', format=f'PD({max_epochs})',
-                       array=np.array(list(dict['dates_ave'].values()), dtype=object), unit='d, MJD')
+                       array=np.array(list(dict['dates_ave'].values()), dtype=object), unit='days, MJD')
     col3 = fits.Column(name='flux_SCI', format=f'PD({max_epochs})',
                        array=np.array(list(dict['flux_SCI'].values()), dtype=object), unit='mJy')
     col4 = fits.Column(name='flux_WGT', format=f'PD({max_epochs})',
@@ -922,19 +923,24 @@ def write_manifest(args):
     manifest = {}
 
     t0 = time.time()
+
+    dt = datetime.datetime.today()
+    date = dt.isoformat('T', 'seconds')
+    comment = f"# Manifest file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
     d = args.__dict__
     for key in ordered:
         manifest[key] = d[key]
-
-    d = datetime.datetime.today()
-    date = d.isoformat('T', 'seconds')
-    comment = f"# Manifest file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
-
-    yaml_file = os.path.join(args.outdir, 'manifest.yaml')
-    with open(yaml_file, 'w') as manifest_file:
+    #yaml_file = os.path.join(args.outdir, 'manifest.yaml')
+    #with open(yaml_file, 'w') as manifest_file:
+    #    manifest_file.write(comment)
+    #    yaml.dump(manifest, manifest_file, sort_keys=False, default_flow_style=False)
+    #LOGGER.info(f"Wrote manifest file to: {yaml_file} in: {elapsed_time(t0)}")
+    json_file = os.path.join(args.outdir, 'manifest.json')
+    LOGGER.info(f"writing manifest to: {json_file}")
+    with open(json_file, 'w') as manifest_file:
         manifest_file.write(comment)
-        yaml.dump(manifest, manifest_file, sort_keys=False, default_flow_style=False)
-    LOGGER.info(f"Wrote manifest file to: {yaml_file} in: {elapsed_time(t0)}")
+        json.dump(manifest, manifest_file, sort_keys=False, indent=6)
+    LOGGER.info(f"Wrote manifest file to: {json_file} in: {elapsed_time(t0)}")
 
 
 def in_uniform_coverage(ra, dec, field):
