@@ -514,7 +514,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     rejected = []
     lc_local = {}
     rejected_ids = []
-
+    
     # Define the ID for the lightcurve information from this filename
     if get_lightcurve:
         lcID = filename
@@ -578,19 +578,40 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
         LOGGER.debug(f"Found naxis1,naxis2: {naxis1},{naxis2}")
         LOGGER.debug(f"Found x1,x2: {x1},{x2}")
         LOGGER.debug(f"Found y1,y2: {y1},{y2}")
+        
+        # Append data from (x0, y0) pixel from EXTNAME
+        if get_lightcurve:
+            HDUNUMW = hdunum['WGT']
+            HDUNUMS = hdunum['SCI']
+            try:
+                data_extname = float(ifits[HDUNUMW][int(y0), int(x0)][0][0])
+                if data_extname != 0.0:
+                    lc_local.setdefault(f'flux_WGT', []).append(data_extname)
+                    lc_local.setdefault(f'flux_SCI', []).append(float(ifits[HDUNUMS][int(y0), int(x0)][0][0]))
+                else:
+                    LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} zero flux weight")
+                    rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
+                    rejected_ids.append(objID[k])
+                    continue
+            except Exception as e:
+                logger.error(e)
+                data_extname = float("NaN")
+            
+            del data_extname
 
         for EXTNAME in extnames:
             # The hdunum for that extname
             HDUNUM = hdunum[EXTNAME]
             # Append data from (x0, y0) pixel from EXTNAME
-            if get_lightcurve:
-                try:
-                    data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
-                except Exception as e:
-                    logger.error(e)
-                    data_extname = float("NaN")
-                lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
-                del data_extname
+            # Getting this out of the loop so we can do flux_wgt cut before it is added to the dictionnary for speed-up
+            #if get_lightcurve:
+            #    try:
+            #        data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
+            #    except Exception as e:
+            #        logger.error(e)
+            #        data_extname = float("NaN")
+            #    lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
+            #    del data_extname
 
             # Skip the fits part if notfits is true
             if nofits:
@@ -861,15 +882,17 @@ def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
     # as well as re-orienting
     df = pandas.DataFrame.from_dict(lc, orient='index')
     dict = df.to_dict()
-    LOGGER.info(f"Converted dictionary to pandas and back in: {elapsed_time(t0)}")
+    LOGGER.debug(f"Converted dictionary to pandas and back in: {elapsed_time(t0)}")
     col1 = fits.Column(name='id', format='30A', array=np.array(list(dict['id'].values()), dtype=object))
     col2 = fits.Column(name='dates_ave', format=f'PD({max_epochs})',
-                       array=np.array(list(dict['dates_ave'].values()), dtype=object), unit='MJD')
+                       array=np.array(list(dict['dates_ave'].values()), dtype=object), unit='d, MJD')
     col3 = fits.Column(name='flux_SCI', format=f'PD({max_epochs})',
                        array=np.array(list(dict['flux_SCI'].values()), dtype=object), unit='mJy')
     col4 = fits.Column(name='flux_WGT', format=f'PD({max_epochs})',
                        array=np.array(list(dict['flux_WGT'].values()), dtype=object))
     hdu = fits.BinTableHDU.from_columns([col1, col2, col3, col4])
+    hdu.header.set('TELESCOP', 'South Pole Telescope')
+    hdu.header.set('INSTRUME', 'SPT-3G')
     hdu.writeto(fits_file, overwrite=True)
     LOGGER.info(f"Wrote lightcurve file to: {fits_file} in: {elapsed_time(t0)}")
 
