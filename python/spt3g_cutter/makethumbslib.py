@@ -206,8 +206,6 @@ def run(args):
               'stage': args.stage,
               'stage_prefix': args.stage_prefix}
 
-        print(f"makethumbslib len: {len(objID)}")
-
         if NP > 1:
             # Get result to catch exceptions later, after close()
             s = p.apply_async(cutterlib.fitscutter, args=ar, kwds=kw)

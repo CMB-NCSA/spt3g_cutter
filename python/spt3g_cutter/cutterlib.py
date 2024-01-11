@@ -580,15 +580,14 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
         LOGGER.debug(f"Found x1,x2: {x1},{x2}")
         LOGGER.debug(f"Found y1,y2: {y1},{y2}")
 
-        # Append data from (x0, y0) pixel from EXTNAME
+        # Append data from (x0, y0) pixel for both extensions
         if get_lightcurve:
-            HDUNUMW = hdunum['WGT']
-            HDUNUMS = hdunum['SCI']
+            HDU_SCI = hdunum['WGT']
+            HDU_WGT = hdunum['SCI']
             try:
-                data_extname = float(ifits[HDUNUMW][int(y0), int(x0)][0][0])
-                if data_extname != 0.0:
-                    lc_local.setdefault(f'flux_WGT', []).append(data_extname)
-                    lc_local.setdefault(f'flux_SCI', []).append(float(ifits[HDUNUMS][int(y0), int(x0)][0][0]))
+                data_WGT = float(ifits[HDU_WGT][int(y0), int(x0)][0][0])
+                if data_WGT != 0.0:
+                    data_SCI = float(ifits[HDU_SCI][int(y0), int(x0)][0][0])
                 else:
                     LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} zero flux weight")
                     rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
@@ -596,27 +595,24 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
                     continue
             except Exception as e:
                 logger.error(e)
-                data_extname = float("NaN")
+                data_SCI = float("NaN")
+                data_WGT = float("NaN")
 
-            del data_extname
+            lc_local.setdefault('flux_WGT', []).append(data_WGT)
+            lc_local.setdefault('flux_SCI', []).append(data_SCI)
 
+            del data_SCI
+            del data_WGT
+
+        # Skip the fits part if notfits is true
+        if nofits:
+            LOGGER.debug(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
+            continue
+
+        # Now we cut the fits stamp
         for EXTNAME in extnames:
             # The hdunum for that extname
             HDUNUM = hdunum[EXTNAME]
-            # Append data from (x0, y0) pixel from EXTNAME
-            # Getting this out of the loop so we can do flux_wgt cut before it is added to the dictionnary for speed-up
-            #if get_lightcurve:
-            #    try:
-            #        data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
-            #    except Exception as e:
-            #        logger.error(e)
-            #        data_extname = float("NaN")
-            #    lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
-            #    del data_extname
-
-            # Skip the fits part if notfits is true
-            if nofits:
-                continue
             # Create a canvas
             im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
             # Read in the image section we want for SCI/WGT
@@ -629,11 +625,6 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
             # Add the objID to the header of the thumbnail
             rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
             h_section[EXTNAME].add_record(rec)
-
-        # Skip the fits part if notfits is true
-        if nofits:
-            LOGGER.debug(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
-            continue
 
         # Get the basedir
         basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)
