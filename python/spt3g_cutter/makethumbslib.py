@@ -10,6 +10,8 @@ import spt3g_cutter.fitsfinder as fitsfinder
 import spt3g_cutter.cutterlib as cutterlib
 import os
 import psutil
+import copy
+
 
 def cmdline():
 
@@ -20,7 +22,7 @@ def cmdline():
     args, remaining_argv = conf_parser.parse_known_args()
     # If we have -c or --config, then we proceed to read it
     if args.configfile:
-        conf_dpythefaults = parse_config(args.configfile)
+        conf_defaults = parse_config(args.configfile)
     else:
         conf_defaults = {}
 
@@ -188,14 +190,23 @@ def run(args):
     t0 = time.time()
     for file in args.files:
         counter = f"{k}/{Nfiles} files"
+
+        # Make a copy of objID if not None:
+        if args.objID is None:
+            objID = None
+        else:
+            objID = copy.deepcopy(args.objID)
+
         ar = (file, args.ra, args.dec, cutout_dict, rejected_dict, lightcurve_dict)
-        kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin', 'objID': args.objID,
+        kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin', 'objID': objID,
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter,
               'get_lightcurve': args.get_lightcurve,
               'get_uniform_coverage': args.get_uniform_coverage,
               'nofits': args.nofits,
               'stage': args.stage,
               'stage_prefix': args.stage_prefix}
+
+        print(f"makethumbslib len: {len(objID)}")
 
         if NP > 1:
             # Get result to catch exceptions later, after close()

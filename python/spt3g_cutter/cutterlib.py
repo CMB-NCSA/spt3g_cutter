@@ -515,7 +515,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
     rejected = []
     lc_local = {}
     rejected_ids = []
-    
+
     # Define the ID for the lightcurve information from this filename
     if get_lightcurve:
         lcID = filename
@@ -579,7 +579,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
         LOGGER.debug(f"Found naxis1,naxis2: {naxis1},{naxis2}")
         LOGGER.debug(f"Found x1,x2: {x1},{x2}")
         LOGGER.debug(f"Found y1,y2: {y1},{y2}")
-        
+
         # Append data from (x0, y0) pixel from EXTNAME
         if get_lightcurve:
             HDUNUMW = hdunum['WGT']
@@ -597,7 +597,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
             except Exception as e:
                 logger.error(e)
                 data_extname = float("NaN")
-            
+
             del data_extname
 
         for EXTNAME in extnames:
