@@ -223,12 +223,14 @@ def run(args):
         for r in results:
             r.get()
         p.join()
-        p.terminate()
 
         # Update with returned dictionary
-        cutout_names = dict(cutout_dict)
-        rejected_pos = dict(rejected_dict)
-        lightcurve = dict(lightcurve_dict)
+        logger.info("Updating returned dictionaries")
+        lightcurve = lightcurve_dict  # .copy()
+        cutout_names = cutout_dict  # .copy()
+        rejected_names = rejected_dict  # .copy()
+
+        p.terminate()
         del p
 
     # Time it took to just cut
@@ -236,10 +238,7 @@ def run(args):
 
     # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
-    args.rejected_positions = rejected_pos
-
-    # Get the rejected ids:
-    args.rejected_ids = cutterlib.get_rejected_ids(args)
+    args.rejected_names = rejected_names
 
     args = cutterlib.capture_job_metadata(args)
 
@@ -248,32 +247,48 @@ def run(args):
     process = psutil.Process(os.getpid())
     logger.info(f"Memory percent: {process.memory_percent()} %")
 
-    # Clean up
-    del manager
-    del cutout_names
-    del cutout_dict
-    del rejected_pos
-    del rejected_dict
-    del lightcurve_dict
-
-    # Get the observations dictionary
-    args.obs_dict = cutterlib.get_obs_dictionary(lightcurve)
-    logger.info(f"Size of lightcurve: {sys.getsizeof(lightcurve)/1024/1024}")
-    logger.info(f"Size of args.obs_dict: {sys.getsizeof(args.obs_dict)/1024/1024}")
-
-    # Report total memory usage
-    logger.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
-    process = psutil.Process(os.getpid())
-    logger.info(f"Memory percent: {process.memory_percent()} %")
+    # # Clean up
+    if NP > 1:
+        logger.info("Deleting variables")
+        del manager
+        del cutout_names
+        del cutout_dict
+        del rejected_pos
+        del rejected_dict
+        del lightcurve_dict
 
     if args.get_lightcurve:
+
+        # Get the observations dictionary
+        args.obs_dict = cutterlib.get_obs_dictionary(lightcurve)
+        logger.info(f"Size of lightcurve: {sys.getsizeof(lightcurve)/1024/1024}")
+        logger.info(f"Size of args.obs_dict: {sys.getsizeof(args.obs_dict)/1024/1024}")
+
+        # Create new pool
+        if NP > 1:
+            p = mp.Pool(processes=NP)
+            results = []
+
         for BAND in args.bands:
             for FILETYPE in args.filetypes:
                 logger.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
-                process = psutil.Process(os.getpid())
+                ar = (lightcurve, BAND, FILETYPE, args)
                 logger.info(f"Memory percent: {process.memory_percent()} %")
-                cutterlib.repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args)
+                if NP > 1:
+                    s = p.apply_async(cutterlib.repack_lightcurve_band_filetype, args=ar)
+                    results.append(s)
+                else:
+                    cutterlib.repack_lightcurve_band_filetype(*ar)
 
-    # Write the manifest yaml file
+        if NP > 1:
+            p.close()
+            # Check for exceptions
+            for r in results:
+                r.get()
+            p.join()
+            p.terminate()
+            del p
+
+    # Write the manifest file
     cutterlib.write_manifest(args)
     logger.info(f"Grand Total time: {cutterlib.elapsed_time(t0)}")
