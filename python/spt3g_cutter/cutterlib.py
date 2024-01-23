@@ -33,7 +33,6 @@ import psutil
 from astropy.io import fits
 from astropy.time import Time
 import json
-from multiprocessing.managers import DictProxy
 
 core_G3Units_deg = 0.017453292519943295
 core_G3Units_rad = 1
@@ -353,7 +352,7 @@ def get_NP(MP):
     return NP
 
 
-def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
+def fitscutter(filename, ra, dec, cutout_names, rejected_positions, lightcurve,
                objID=None, xsize=1.0, ysize=1.0, units='arcmin', get_lightcurve=False,
                prefix=PREFIX, outdir=None, clobber=True, logger=None, counter='',
                get_uniform_coverage=False, nofits=False,
@@ -377,9 +376,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
 
     cutout_names: dictionary
         Dict story the names of the cutout files
-    rejected_names: dictionary
-        Dict of rejected ids per filename with centers outside the FITS files
-        or WGT=0
+    rejected_positions: dictionary
+        Dict of rejected positions with centers outside the FITS files
     lightcurve: dictionary
         Dict with lightcurve information
 
@@ -405,7 +403,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         Select only objects in the SPT uniform coverage
 
     Returns:
-        cutout_names, rejected_names, lightcurve
+        cutout_names, rejected_positions
     """
 
     # global timer for function
@@ -507,16 +505,17 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
 
     if cutout_names is None:
         cutout_names = {}
-    if rejected_names is None:
-        rejected_names = {}
+    if rejected_positions is None:
+        rejected_positions = {}
     if lightcurve is None:
         lightcurve = {}
 
     # Local lists/dicts
     outnames = []
+    rejected = []
     lc_local = {}
     rejected_ids = []
-
+    
     # Define the ID for the lightcurve information from this filename
     if get_lightcurve:
         lcID = filename
@@ -553,6 +552,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         # Check if in field extent
         if get_uniform_coverage and not in_uniform_coverage(ra[k], dec[k], object):
             LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} outside field extent")
+            rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
             rejected_ids.append(objID[k])
             continue
 
@@ -560,6 +560,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         if x0 < 0 or y0 < 0 or x0 > NAXIS1 or y0 > NAXIS2:
             LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} outside {filename}")
             LOGGER.debug(f"(x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
+            rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
             rejected_ids.append(objID[k])
             continue
 
@@ -578,39 +579,44 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         LOGGER.debug(f"Found naxis1,naxis2: {naxis1},{naxis2}")
         LOGGER.debug(f"Found x1,x2: {x1},{x2}")
         LOGGER.debug(f"Found y1,y2: {y1},{y2}")
-
-        # Append data from (x0, y0) pixel for both extensions
+        
+        # Append data from (x0, y0) pixel from EXTNAME
         if get_lightcurve:
-            HDU_SCI = hdunum['WGT']
-            HDU_WGT = hdunum['SCI']
+            HDUNUMW = hdunum['WGT']
+            HDUNUMS = hdunum['SCI']
             try:
-                data_WGT = float(ifits[HDU_WGT][int(y0), int(x0)][0][0])
-                if data_WGT != 0.0:
-                    data_SCI = float(ifits[HDU_SCI][int(y0), int(x0)][0][0])
+                data_extname = float(ifits[HDUNUMW][int(y0), int(x0)][0][0])
+                if data_extname != 0.0:
+                    lc_local.setdefault(f'flux_WGT', []).append(data_extname)
+                    lc_local.setdefault(f'flux_SCI', []).append(float(ifits[HDUNUMS][int(y0), int(x0)][0][0]))
                 else:
                     LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} zero flux weight")
+                    rejected.append(f"{ra[k]}, {dec[k]}, {objID[k]}")
                     rejected_ids.append(objID[k])
                     continue
             except Exception as e:
                 logger.error(e)
-                data_SCI = float("NaN")
-                data_WGT = float("NaN")
+                data_extname = float("NaN")
+            
+            del data_extname
 
-            lc_local.setdefault('flux_WGT', []).append(data_WGT)
-            lc_local.setdefault('flux_SCI', []).append(data_SCI)
-
-            del data_SCI
-            del data_WGT
-
-        # Skip the fits part if notfits is true
-        if nofits:
-            LOGGER.debug(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
-            continue
-
-        # Now we cut the fits stamp
         for EXTNAME in extnames:
             # The hdunum for that extname
             HDUNUM = hdunum[EXTNAME]
+            # Append data from (x0, y0) pixel from EXTNAME
+            # Getting this out of the loop so we can do flux_wgt cut before it is added to the dictionnary for speed-up
+            #if get_lightcurve:
+            #    try:
+            #        data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
+            #    except Exception as e:
+            #        logger.error(e)
+            #        data_extname = float("NaN")
+            #    lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
+            #    del data_extname
+
+            # Skip the fits part if notfits is true
+            if nofits:
+                continue
             # Create a canvas
             im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
             # Read in the image section we want for SCI/WGT
@@ -623,6 +629,11 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
             # Add the objID to the header of the thumbnail
             rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
             h_section[EXTNAME].add_record(rec)
+
+        # Skip the fits part if notfits is true
+        if nofits:
+            LOGGER.debug(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
+            continue
 
         # Get the basedir
         basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)
@@ -658,23 +669,23 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         lc_local['rejected_ids'] = rejected_ids
         lightcurve[lcID] = lc_local
 
-    if len(rejected_ids) > 0:
-        rejected_names[filename] = rejected_ids
-        logger.info(f"Rejected {len(rejected_ids)} positions for {filename}")
+    if len(rejected) > 0:
+        rejected_positions[filename] = rejected
+        logger.info(f"Rejected {len(rejected)} positions for {filename}")
 
     if stage:
         remove_staged_file(filename)
 
     # Clean up variables
-    # del ifits
-    # del outnames
-    # del rejected
-    # del lc_local
-    # del rejected_ids
-    # del im_section
-    # del h_section
+    del ifits
+    del outnames
+    del rejected
+    del lc_local
+    del rejected_ids
+    del im_section
+    del h_section
 
-    return cutout_names, rejected_names, lightcurve
+    return cutout_names, rejected_positions, lightcurve
 
 
 def get_id_names(ra, dec, prefix):
@@ -738,7 +749,7 @@ def capture_job_metadata(args):
     args.cutout_files = cutout_files
 
     # Get the size on disk
-    # args.size_on_disk = get_size_on_disk(args.outdir)
+    #args.size_on_disk = get_size_on_disk(args.outdir)
     args.size_on_disk = None
     args.files_on_disk = len(args.cutout_files)
 
@@ -908,8 +919,7 @@ def write_manifest(args):
     ordered = ['bands', 'date_start', 'date_end', 'tablename', 'dbname', 'np', 'outdir',
                'inputList', 'yearly', 'files', 'id_names', 'size_on_disk',
                'JOB_ID', 'JOB_OUTPUT_DIR', 'files_on_disk', 'cutout_files',
-               'rejected_names',
-               'input_positions']
+               'rejected_positions', 'input_positions']
     manifest = {}
 
     t0 = time.time()
@@ -919,12 +929,12 @@ def write_manifest(args):
     comment = f"# Manifest file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
     d = args.__dict__
     for key in ordered:
-
-        if isinstance(d[key], DictProxy):
-            manifest[key] = d[key]._getvalue()
-        else:
-            manifest[key] = d[key]
-
+        manifest[key] = d[key]
+    #yaml_file = os.path.join(args.outdir, 'manifest.yaml')
+    #with open(yaml_file, 'w') as manifest_file:
+    #    manifest_file.write(comment)
+    #    yaml.dump(manifest, manifest_file, sort_keys=False, default_flow_style=False)
+    #LOGGER.info(f"Wrote manifest file to: {yaml_file} in: {elapsed_time(t0)}")
     json_file = os.path.join(args.outdir, 'manifest.json')
     LOGGER.info(f"writing manifest to: {json_file}")
     with open(json_file, 'w') as manifest_file:
