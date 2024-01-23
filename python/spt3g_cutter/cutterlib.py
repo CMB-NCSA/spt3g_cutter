@@ -33,7 +33,6 @@ import psutil
 from astropy.io import fits
 from astropy.time import Time
 import json
-from multiprocessing.managers import DictProxy
 
 core_G3Units_deg = 0.017453292519943295
 core_G3Units_rad = 1
@@ -579,42 +578,38 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         LOGGER.debug(f"Found x1,x2: {x1},{x2}")
         LOGGER.debug(f"Found y1,y2: {y1},{y2}")
 
-        # Append data from (x0, y0) pixel from EXTNAME
+        # Append data from (x0, y0) pixel for both extensions
         if get_lightcurve:
-            HDUNUMW = hdunum['WGT']
-            HDUNUMS = hdunum['SCI']
+            HDU_SCI = hdunum['WGT']
+            HDU_WGT = hdunum['SCI']
             try:
-                data_extname = float(ifits[HDUNUMW][int(y0), int(x0)][0][0])
-                if data_extname != 0.0:
-                    lc_local.setdefault('flux_WGT', []).append(data_extname)
-                    lc_local.setdefault('flux_SCI', []).append(float(ifits[HDUNUMS][int(y0), int(x0)][0][0]))
+                data_WGT = float(ifits[HDU_WGT][int(y0), int(x0)][0][0])
+                if data_WGT != 0.0:
+                    data_SCI = float(ifits[HDU_SCI][int(y0), int(x0)][0][0])
                 else:
                     LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} zero flux weight")
                     rejected_ids.append(objID[k])
                     continue
             except Exception as e:
                 logger.error(e)
-                data_extname = float("NaN")
+                data_SCI = float("NaN")
+                data_WGT = float("NaN")
 
-            del data_extname
+            lc_local.setdefault('flux_WGT', []).append(data_WGT)
+            lc_local.setdefault('flux_SCI', []).append(data_SCI)
 
+            del data_SCI
+            del data_WGT
+
+        # Skip the fits part if notfits is true
+        if nofits:
+            LOGGER.debug(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
+            continue
+
+        # Now we cut the fits stamp
         for EXTNAME in extnames:
             # The hdunum for that extname
             HDUNUM = hdunum[EXTNAME]
-            # Append data from (x0, y0) pixel from EXTNAME
-            # Getting this out of the loop so we can do flux_wgt cut before it is added to the dictionnary for speed-up
-            # if get_lightcurve:
-            #    try:
-            #        data_extname = float(ifits[HDUNUM][int(y0), int(x0)][0][0])
-            #    except Exception as e:
-            #        logger.error(e)
-            #        data_extname = float("NaN")
-            #    lc_local.setdefault(f'flux_{EXTNAME}', []).append(data_extname)
-            #    del data_extname
-
-            # Skip the fits part if notfits is true
-            if nofits:
-                continue
             # Create a canvas
             im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
             # Read in the image section we want for SCI/WGT
@@ -627,11 +622,6 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
             # Add the objID to the header of the thumbnail
             rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
             h_section[EXTNAME].add_record(rec)
-
-        # Skip the fits part if notfits is true
-        if nofits:
-            LOGGER.debug(f"Skipping FITS file creation for objID:{objID[k]} (RA,DEC):{ra[k]},{dec[k]}")
-            continue
 
         # Get the basedir
         basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)
@@ -746,7 +736,7 @@ def capture_job_metadata(args):
     args.cutout_files = cutout_files
 
     # Get the size on disk
-    #args.size_on_disk = get_size_on_disk(args.outdir)
+    # args.size_on_disk = get_size_on_disk(args.outdir)
     args.size_on_disk = None
     args.files_on_disk = len(args.cutout_files)
 
@@ -926,11 +916,7 @@ def write_manifest(args):
     comment = f"# Manifest file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
     d = args.__dict__
     for key in ordered:
-        if isinstance(d[key], DictProxy):
-            manifest[key] = d[key]._getvalue()
-        else:
-            manifest[key] = d[key]
-
+        manifest[key] = d[key]
     json_file = os.path.join(args.outdir, 'manifest.json')
     LOGGER.info(f"writing manifest to: {json_file}")
     with open(json_file, 'w') as manifest_file:
