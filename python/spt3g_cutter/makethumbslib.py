@@ -11,6 +11,7 @@ import spt3g_cutter.cutterlib as cutterlib
 import os
 import psutil
 
+
 def cmdline():
 
     # Make a proto-parse use to read in the default yaml configuration
@@ -20,7 +21,7 @@ def cmdline():
     args, remaining_argv = conf_parser.parse_known_args()
     # If we have -c or --config, then we proceed to read it
     if args.configfile:
-        conf_dpythefaults = parse_config(args.configfile)
+        conf_defaults = parse_config(args.configfile)
     else:
         conf_defaults = {}
 
@@ -158,7 +159,7 @@ def run(args):
     rec = fitsfinder.query2rec(query, dbhandle)
 
     cutout_names = {}
-    rejected_pos = {}
+    rejected_names = {}
     lightcurve = {}
 
     # Get the number of processors to use
@@ -204,7 +205,7 @@ def run(args):
         else:
             names, pos, lc = cutterlib.fitscutter(*ar, **kw)
             cutout_names.update(names)
-            rejected_pos.update(pos)
+            rejected_names.update(pos)
             lightcurve.update(lc)
         k += 1
 
@@ -214,12 +215,14 @@ def run(args):
         for r in results:
             r.get()
         p.join()
-        p.terminate()
 
-        # Update with returned dictionary
+        # Update with returned dictionary, we need to make them real
+        # dictionaries, instead DictProxy objects returned from multiprocessing
+        logger.info("Updating returned dictionaries")
         cutout_names = dict(cutout_dict)
-        rejected_pos = dict(rejected_dict)
+        rejected_names = dict(rejected_dict)
         lightcurve = dict(lightcurve_dict)
+        p.terminate()
         del p
 
     # Time it took to just cut
@@ -227,10 +230,7 @@ def run(args):
 
     # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
-    args.rejected_positions = rejected_pos
-
-    # Get the rejected ids:
-    args.rejected_ids = cutterlib.get_rejected_ids(args)
+    args.rejected_names = rejected_names
 
     args = cutterlib.capture_job_metadata(args)
 
@@ -243,7 +243,7 @@ def run(args):
     del manager
     del cutout_names
     del cutout_dict
-    del rejected_pos
+    del rejected_names
     del rejected_dict
     del lightcurve_dict
 
@@ -265,6 +265,6 @@ def run(args):
                 logger.info(f"Memory percent: {process.memory_percent()} %")
                 cutterlib.repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args)
 
-    # Write the manifest yaml file
+    # Write the manifest json file
     cutterlib.write_manifest(args)
     logger.info(f"Grand Total time: {cutterlib.elapsed_time(t0)}")
