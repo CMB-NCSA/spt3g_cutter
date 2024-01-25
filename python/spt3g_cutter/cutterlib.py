@@ -33,6 +33,7 @@ import psutil
 from astropy.io import fits
 from astropy.time import Time
 import json
+from multiprocessing.managers import DictProxy
 
 core_G3Units_deg = 0.017453292519943295
 core_G3Units_rad = 1
@@ -916,7 +917,10 @@ def write_manifest(args):
     comment = f"# Manifest file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
     d = args.__dict__
     for key in ordered:
-        manifest[key] = d[key]
+        if isinstance(d[key], DictProxy):
+            manifest[key] = d[key]._getvalue()
+        else:
+            manifest[key] = d[key]
     json_file = os.path.join(args.outdir, 'manifest.json')
     LOGGER.info(f"writing manifest to: {json_file}")
     with open(json_file, 'w') as manifest_file:
