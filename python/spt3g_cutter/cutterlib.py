@@ -845,6 +845,7 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
 
     LOGGER.info(f"Done Re-packed lightcurve for {BAND}/{FILETYPE} in: {elapsed_time(t0)}")
     write_lightcurve_band_filetype(LC, BAND, FILETYPE, args)
+    del lightcurve
     return
 
 

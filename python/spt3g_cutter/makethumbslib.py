@@ -217,7 +217,6 @@ def run(args):
             lightcurve.update(lc)
         k += 1
 
-    NP = 1
     if NP > 1:
         p.close()
         # Check for exceptions
@@ -228,8 +227,8 @@ def run(args):
         # Update with returned dictionary, we need to make them real
         # dictionaries, instead DictProxy objects returned from multiprocessing
         logger.info("Updating returned dictionaries")
-        cutout_names = cutout_dict
-        rejected_names = rejected_dict
+        cutout_names = cutout_dict.copy()
+        rejected_names = rejected_dict.copy()
         lightcurve = lightcurve_dict.copy()
         p.terminate()
         del p
@@ -250,7 +249,7 @@ def run(args):
 
     # # Clean up
     if NP > 1:
-        logger.info("Deleting variables")
+        logger.info("Deleting variables -- probably futile")
         del manager
         del cutout_names
         del cutout_dict
@@ -266,7 +265,9 @@ def run(args):
         logger.info(f"Size of args.obs_dict: {sys.getsizeof(args.obs_dict)/1024/1024}")
 
         # Create new pool
-        NP = 1
+        # NP = 1  # Remove this line once we have a machine with more memory
+        NP = len(args.bands)
+        logger.info(f"Creating pool with: {NP} processes for repack lightcurve")
         if NP > 1:
             p = mp.Pool(processes=NP)
             results = []
