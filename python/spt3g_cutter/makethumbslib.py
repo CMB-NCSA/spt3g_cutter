@@ -9,6 +9,8 @@ import spt3g_cutter
 import spt3g_cutter.fitsfinder as fitsfinder
 import spt3g_cutter.cutterlib as cutterlib
 import os
+import psutil
+import copy
 
 
 def cmdline():
@@ -158,7 +160,7 @@ def run(args):
     rec = fitsfinder.query2rec(query, dbhandle)
 
     cutout_names = {}
-    rejected_pos = {}
+    rejected_names = {}
     lightcurve = {}
 
     # Get the number of processors to use
@@ -188,8 +190,15 @@ def run(args):
     t0 = time.time()
     for file in args.files:
         counter = f"{k}/{Nfiles} files"
+
+        # Make a copy of objID if not None:
+        if args.objID is None:
+            objID = None
+        else:
+            objID = copy.deepcopy(args.objID)
+
         ar = (file, args.ra, args.dec, cutout_dict, rejected_dict, lightcurve_dict)
-        kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin', 'objID': args.objID,
+        kw = {'xsize': xsize, 'ysize': ysize, 'units': 'arcmin', 'objID': objID,
               'prefix': args.prefix, 'outdir': args.outdir, 'counter': counter,
               'get_lightcurve': args.get_lightcurve,
               'get_uniform_coverage': args.get_uniform_coverage,
@@ -204,7 +213,7 @@ def run(args):
         else:
             names, pos, lc = cutterlib.fitscutter(*ar, **kw)
             cutout_names.update(names)
-            rejected_pos.update(pos)
+            rejected_names.update(pos)
             lightcurve.update(lc)
         k += 1
 
@@ -215,28 +224,74 @@ def run(args):
             r.get()
         p.join()
 
-        # Update with returned dictionary
-        cutout_names = dict(cutout_dict)
-        rejected_pos = dict(rejected_dict)
-        lightcurve = dict(lightcurve_dict)
+        # Update with returned dictionary, we need to make them real
+        # dictionaries, instead DictProxy objects returned from multiprocessing
+        logger.info("Updating returned dictionaries")
+        cutout_names = cutout_dict.copy()
+        rejected_names = rejected_dict.copy()
+        lightcurve = lightcurve_dict.copy()
+        p.terminate()
+        del p
 
     # Time it took to just cut
-    logger.info(f"Grand cutting time: {cutterlib.elapsed_time(t0)}")
+    logger.info(f"Total cutting time: {cutterlib.elapsed_time(t0)}")
 
     # Store the dict with all of the cutout names and rejects
     args.cutout_names = cutout_names
-    args.rejected_positions = rejected_pos
-
-    # Get the rejected ids:
-    args.rejected_ids = cutterlib.get_rejected_ids(args)
+    args.rejected_names = rejected_names
 
     args = cutterlib.capture_job_metadata(args)
 
-    if args.get_lightcurve:
-        args.lc = cutterlib.repack_lightcurve(lightcurve, args)
-        cutterlib.write_lightcurve(args)
-        logger.info("Done with lightcurve")
+    # Report total memory usage
+    logger.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
+    process = psutil.Process(os.getpid())
+    logger.info(f"Memory percent: {process.memory_percent()} %")
 
-    # Write the manifest yaml file
+    # # Clean up
+    if NP > 1:
+        logger.info("Deleting variables -- probably futile")
+        del manager
+        del cutout_names
+        del cutout_dict
+        del rejected_names
+        del rejected_dict
+        del lightcurve_dict
+
+    if args.get_lightcurve:
+
+        # Get the observations dictionary
+        args.obs_dict = cutterlib.get_obs_dictionary(lightcurve)
+        logger.info(f"Size of lightcurve: {sys.getsizeof(lightcurve)/1024/1024}")
+        logger.info(f"Size of args.obs_dict: {sys.getsizeof(args.obs_dict)/1024/1024}")
+
+        # Create new pool
+        # NP = 1  # Remove this line once we have a machine with more memory
+        NP = len(args.bands)
+        logger.info(f"Creating pool with: {NP} processes for repack lightcurve")
+        if NP > 1:
+            p = mp.Pool(processes=NP)
+            results = []
+
+        for BAND in args.bands:
+            for FILETYPE in args.filetypes:
+                logger.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
+                ar = (lightcurve, BAND, FILETYPE, args)
+                logger.info(f"Memory percent: {process.memory_percent()} %")
+                if NP > 1:
+                    s = p.apply_async(cutterlib.repack_lightcurve_band_filetype, args=ar)
+                    results.append(s)
+                else:
+                    cutterlib.repack_lightcurve_band_filetype(*ar)
+
+        if NP > 1:
+            p.close()
+            # Check for exceptions
+            for r in results:
+                r.get()
+            p.join()
+            p.terminate()
+            del p
+
+    # Write the manifest file
     cutterlib.write_manifest(args)
     logger.info(f"Grand Total time: {cutterlib.elapsed_time(t0)}")
