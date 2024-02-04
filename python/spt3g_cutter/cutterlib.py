@@ -966,7 +966,7 @@ def in_uniform_coverage(ra, dec, field):
 
 
 # Function lifted from:
-# https://github.com/SouthPoleTelescope/spt3g_software/blob/master/sources/source_utils.py
+# https://github.com/SouthPoleTelescope/spt3g_software/blob/6639f82dab922d583f8bd1eaf94ea6938d1ab0c1/sources/python/fields.py#L357
 def get_field_extent(
     field,
     ra_pad=3 * core_G3Units_deg,
@@ -975,18 +975,23 @@ def get_field_extent(
 ):
     """
     Get the extent of the given field.
+
     RA angles are always given between 0 and 360 degrees, with the left edge of
-    the field given first. Dec angles are given between -90 and 90 degrees,with
+    the field given first. Dec angles are given between -90 and 90 degrees, with
     the lower edge of the field given first.
+
     For example, the SPT-3G winter field "ra0hdec-44.75" has ra range (310, 50)
     degrees, and dec range (-47.5, -42) degrees.
+
     The default padding parameters ensure that the extent of the SPT-3G fields
     covers the area that any bolometer on the focal plane may touch.  Setting
     the padding parameters to 0 instead returns the part of the field that has
     uniformly weighted coverage.  Padding in ra is defined in terms of degrees
     on the sky if ``sky_pad`` is True.
+
     The same padding considerations are not taken into account for the SPT-SZ
     and SPTpol fields.
+
     Arguments
     ---------
     field : str
@@ -1004,6 +1009,7 @@ def get_field_extent(
     sky_pad : bool
         If True, ``ra_pad`` is in terms of true degrees on the sky.  Otherwise,
         it is applied directly to the ra extent without correction.
+
     Returns
     -------
     ra_range : 2-tuple of floats
@@ -1035,7 +1041,6 @@ def get_field_extent(
         "ra6h30dec-45": ((90, 105), (-50, -40)),
         "ra6h30dec-55": ((90, 105), (-60, -50)),
         "sptsz": ((300, 105), (-65, -40)),
-
         # sptpol fields
         "sptpol-100d": ((345, 360), (-60, -50)),
         "sptpol-500d": ((330, 30), (-65, -50)),
@@ -1052,7 +1057,6 @@ def get_field_extent(
         "ra11hdec-25": ((150, 180), (-30, -20)),
         "ra13hdec-25": ((180, 210), (-30, -20)),
         "sptpol-ecs-back": ((150, 210), (-30, -20)),
-
         # spt3g fields
         "ra0hdec-44.75": ((310, 50), (-47.5, -42)),
         "ra0hdec-52.25": ((310, 50), (-55, -49.5)),
@@ -1080,9 +1084,51 @@ def get_field_extent(
         "ra12h30dec-36.75": ((150, 225), (-37.5, -36)),
         "ra12h30dec-40.25": ((150, 225), (-41, -39.5)),
         "spt3g-summerc": ((150, 225), (-41, -29)),
-
-        # Extra custom field for yearly
-        "yearly": ((306.25, 53.25), (-72, -40.25)),
+        "j1745-290": ((266.1067, 266.7267), (-29.0028, -29.0128)),
+        "spt3g-sgrastar": ((266.1067, 266.7267), (-29.0028, -29.0128)),
+        "ra17h45dec-29": ((259.25, 273.25), (-30.5, -27.5)),
+        "ra17h37dec-32": ((257.25, 271.25), (-33.5, -30.5)),
+        "ra17h27dec-35": ((254.75, 268.75), (-36.5, -33.5)),
+        "spt3g-galaxy": ((254.75, 273.25), (-36.5, -27.5)),
+        "ra4h03dec-21": ((14.5, 107), (-21.5, -20.5)),
+        "ra4h03dec-23": ((14.5, 107), (-23.5, -22.5)),
+        "ra4h03dec-25": ((14.5, 107), (-25.5, -24.5)),
+        "ra4h03dec-27": ((14.5, 107), (-27.5, -26.5)),
+        "spt3g-widea": ((14.5, 107), (-27.5, -20.5)),
+        "ra21h53dec-21": ((-78, 14.5), (-21.5, -20.5)),
+        "ra21h53dec-23": ((-78, 14.5), (-23.5, -22.5)),
+        "ra21h53dec-25": ((-78, 14.5), (-25.5, -24.5)),
+        "ra21h53dec-27": ((-78, 14.5), (-27.5, -26.5)),
+        "spt3g-wideb": ((-78, 14.5), (-27.5, -20.5)),
+        "ra12hdec-21": ((120, 240), (-21.5, -20.5)),
+        "ra12hdec-23": ((120, 240), (-23.5, -22.5)),
+        "ra12hdec-25": ((120, 240), (-25.5, -24.5)),
+        "ra12hdec-27": ((120, 240), (-27.5, -26.5)),
+        "spt3g-widec": ((120, 240), (-27.5, -20.5)),
+        "ra21h10dec-29.75": ((-85, 0), (-30.5, -29)),
+        "ra21h10dec-33.25": ((-85, 0), (-34, -32.5)),
+        "ra21h10dec-36.75": ((-85, 0), (-37.5, -36)),
+        "ra21h10dec-40.25": ((-85, 0), (-41, -39.5)),
+        "spt3g-wided": ((-85, 0), (-41, -29)),
+        "ra18h40dec-45.5": ((-110, -50), (-48, -43)),
+        "ra18h40dec-52.5": ((-110, -50), (-55, -50)),
+        "ra18h40dec-59.5": ((-110, -50), (-62, -57)),
+        "ra18h40dec-66.5": ((-110, -50), (-69, -64)),
+        "spt3g-widee": ((-110, -50), (-69, -43)),
+        "ra12h30dec-45": ((150, 225), (-47, -43)),
+        "ra12h30dec-51": ((150, 225), (-53, -49)),
+        "spt3g-widef": ((150, 225), (-53, -43)),
+        "ra6h40dec-66.5": ((50, 150), (-69, -64)),
+        "ra6h40dec-75": ((50, 150), (-79, -71)),
+        "ra6h40dec-72.5": ((50, 150), (-74, -71)),
+        "ra6h40dec-77.5": ((50, 150), (-79, -76)),
+        "spt3g-wideg": ((50, 150), (-79, -64)),
+        "ra23hdec-72.5": ((-80, 50), (-74, -71)),
+        "ra23hdec-77.5": ((-80, 50), (-79, -76)),
+        "spt3g-wideh": ((-80, 50), (-79, -71)),
+        "ra14h20dec-72.5": ((150, 280), (-74, -71)),
+        "ra14h20dec-77.5": ((150, 280), (-79, -76)),
+        "spt3g-widei": ((150, 280), (-79, -71)),
     }
 
     ra, dec = extents[field]
@@ -1090,7 +1136,7 @@ def get_field_extent(
     # padding in true degrees ra
     deg = core_G3Units_deg
     if sky_pad:
-        ra_pad /= np.cos(np.mean(dec) * deg / core_G3Units_rad)
+        ra_pad /= float(np.cos(np.max(np.abs(dec)) * deg / core_G3Units_rad))
 
     # apply padding
     ra = (
@@ -1099,22 +1145,20 @@ def get_field_extent(
     )
     dec = (dec[0] * deg - dec_pad, dec[1] * deg + dec_pad)
 
-    # Convert back to degrees
-    ra = (ra[0]/deg, ra[1]/deg)
-    dec = (dec[0]/deg, dec[1]/deg)
-
     return ra, dec
 
 
 # Function lifted from:
-# https://github.com/SouthPoleTelescope/spt3g_software/blob/master/sources/source_utils.py
+# https://github.com/SouthPoleTelescope/spt3g_software/blob/6639f82dab922d583f8bd1eaf94ea6938d1ab0c1/sources/python/fields.py#L27
 def get_field_name(field):
     """
     Return the standard name for the given observing field.
+
     Arguments
     ---------
     field : str
         Field name, may be an alias
+
     Returns
     -------
     field : str
@@ -1129,6 +1173,12 @@ def get_field_name(field):
         field = "spt3g-summerb"
     elif field in ["summerc", "summer-c"]:
         field = "spt3g-summerc"
+    elif field in ["sgrastar"]:
+        field = "spt3g-sgrastar"
+    elif field in ["ra17h46dec-29"]:
+        field = "j1745-290"
+    elif field in ["galaxy"]:
+        field = "spt3g-galaxy"
     elif field in ["100d", "ra23h30dec-55"]:
         field = "sptpol-100d"
     elif field in ["500d", "ra0hdec-57.5"]:
@@ -1139,6 +1189,83 @@ def get_field_name(field):
         field = "sptpol-ecs"
     elif field in ["ecs-back", "sptpol-summer-back"]:
         field = "sptpol-ecs-back"
+    elif field in ["widea", "wide-a"]:
+        field = "spt3g-widea"
+    elif field in ["wideb", "wide-b"]:
+        field = "spt3g-wideb"
+    elif field in ["widec", "wide-c"]:
+        field = "spt3g-widec"
+    elif field in ["wided", "wide-d"]:
+        field = "spt3g-wided"
+    elif field in ["widee", "wide-e"]:
+        field = "spt3g-widee"
+    elif field in ["widef", "wide-f"]:
+        field = "spt3g-widef"
+    elif field in ["wideg", "wide-g"]:
+        field = "spt3g-wideg"
+    elif field in ["wideh", "wide-h"]:
+        field = "spt3g-wideh"
+    elif field in ["widei", "wide-i"]:
+        field = "spt3g-widei"
+    elif field in ["a1"]:
+        field = "ra4h03dec-21"
+    elif field in ["a2"]:
+        field = "ra4h03dec-23"
+    elif field in ["a3"]:
+        field = "ra4h03dec-25"
+    elif field in ["a4"]:
+        field = "ra4h03dec-27"
+    elif field in ["b1"]:
+        field = "ra21h53dec-21"
+    elif field in ["b2"]:
+        field = "ra21h53dec-23"
+    elif field in ["b3"]:
+        field = "ra21h53dec-25"
+    elif field in ["b4"]:
+        field = "ra21h53dec-27"
+    elif field in ["c1"]:
+        field = "ra12hdec-21"
+    elif field in ["c2"]:
+        field = "ra12hdec-23"
+    elif field in ["c3"]:
+        field = "ra12hdec-25"
+    elif field in ["c4"]:
+        field = "ra12hdec-27"
+    elif field in ["d1"]:
+        field = "ra21h10dec-29.75"
+    elif field in ["d2"]:
+        field = "ra21h10dec-33.25"
+    elif field in ["d3"]:
+        field = "ra21h10dec-36.75"
+    elif field in ["d4"]:
+        field = "ra21h10dec-40.25"
+    elif field in ["e1"]:
+        field = "ra18h40dec-45.5"
+    elif field in ["e2"]:
+        field = "ra18h40dec-52.5"
+    elif field in ["e3"]:
+        field = "ra18h40dec-59.5"
+    elif field in ["e4"]:
+        field = "ra18h40dec-66.5"
+    elif field in ["f1"]:
+        field = "ra12h30dec-45"
+    elif field in ["f2"]:
+        field = "ra12h30dec-51"
+    elif field in ["g1"]:
+        field = "ra6h40dec-66.5"
+    elif field in ["g2"]:
+        field = "ra6h40dec-72.5"
+    elif field in ["g3"]:
+        field = "ra6h40dec-77.5"
+    elif field in ["h1"]:
+        field = "ra23hdec-72.5"
+    elif field in ["h2"]:
+        field = "ra23hdec-77.5"
+    elif field in ["i1"]:
+        field = "ra14h20dec-72.5"
+    elif field in ["i2"]:
+        field = "ra14h20dec-77.5"
+
     return field
 
 
