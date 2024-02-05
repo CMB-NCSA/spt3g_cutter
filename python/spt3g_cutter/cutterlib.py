@@ -844,7 +844,10 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
             LC[objID]['flux_WGT'] = flux_WGT
 
     LOGGER.info(f"Done Re-packed lightcurve for {BAND}/{FILETYPE} in: {elapsed_time(t0)}")
-    write_lightcurve_band_filetype(LC, BAND, FILETYPE, args)
+    if len(LC) == 0:
+        LOGGER.warning(f"Lightcurve for {BAND}/{FILETYPE} is empty -- will not write lightcurve table")
+    else:
+        write_lightcurve_band_filetype(LC, BAND, FILETYPE, args)
     del lightcurve
     return
 
@@ -915,8 +918,9 @@ def write_manifest(args):
 
     dt = datetime.datetime.today()
     date = dt.isoformat('T', 'seconds')
-    comment = f"# Manifest file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}\n"
+    comment = f"Manifest file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}"
     d = args.__dict__
+    manifest['comment'] = comment
     for key in ordered:
         if isinstance(d[key], DictProxy):
             manifest[key] = d[key]._getvalue()
@@ -925,7 +929,6 @@ def write_manifest(args):
     json_file = os.path.join(args.outdir, 'manifest.json')
     LOGGER.info(f"writing manifest to: {json_file}")
     with open(json_file, 'w') as manifest_file:
-        manifest_file.write(comment)
         json.dump(manifest, manifest_file, sort_keys=False, indent=6)
     LOGGER.info(f"Wrote manifest file to: {json_file} in: {elapsed_time(t0)}")
 
@@ -977,8 +980,8 @@ def get_field_extent(
     Get the extent of the given field.
 
     RA angles are always given between 0 and 360 degrees, with the left edge of
-    the field given first. Dec angles are given between -90 and 90 degrees, with
-    the lower edge of the field given first.
+    the field given first. Dec angles are given between -90 and 90 degrees,
+    with the lower edge of the field given first.
 
     For example, the SPT-3G winter field "ra0hdec-44.75" has ra range (310, 50)
     degrees, and dec range (-47.5, -42) degrees.
@@ -1129,6 +1132,8 @@ def get_field_extent(
         "ra14h20dec-72.5": ((150, 280), (-74, -71)),
         "ra14h20dec-77.5": ((150, 280), (-79, -76)),
         "spt3g-widei": ((150, 280), (-79, -71)),
+        # Extra custom field for yearly -- added by FM
+        "yearly": ((306.25, 53.25), (-72, -40.25)),
     }
 
     ra, dec = extents[field]
