@@ -920,7 +920,7 @@ def write_manifest(args):
     date = dt.isoformat('T', 'seconds')
     comment = f"Manifest file created by: spt3g_cutter-{spt3g_cutter.__version__} on {date}"
     d = args.__dict__
-    manifest['comment'] = comment
+    manifest["metadata"] = comment
     for key in ordered:
         if isinstance(d[key], DictProxy):
             manifest[key] = d[key]._getvalue()
