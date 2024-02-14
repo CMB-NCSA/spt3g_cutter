@@ -581,8 +581,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
 
         # Append data from (x0, y0) pixel for both extensions
         if get_lightcurve:
-            HDU_SCI = hdunum['WGT']
-            HDU_WGT = hdunum['SCI']
+            HDU_SCI = hdunum['SCI']
+            HDU_WGT = hdunum['WGT']
             try:
                 data_WGT = float(ifits[HDU_WGT][int(y0), int(x0)][0][0])
                 if data_WGT != 0.0:
