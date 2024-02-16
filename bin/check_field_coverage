@@ -1,0 +1,37 @@
+#!/usr/bin/env python
+
+import spt3g_cutter.cutterlib as cutterlib
+import spt3g_cutter
+import logging
+
+cutterlib.create_logger(level='DEBUG')
+logger = logging.getLogger(__name__)
+logger.info(f"Running spt3g_cutter version: {spt3g_cutter.__version__}")
+
+
+def test_coverage(ra, dec, field, inside):
+    if cutterlib.in_uniform_coverage(ra, dec, field) is inside:
+        logger.info(f"Test passed field: {field} for ra,dec: {ra}, {dec}")
+    else:
+        logger.error(f"Test failed field: {field} for ra,dec: {ra}, {dec}")
+    return
+
+
+if __name__ == "__main__":
+
+    # outside winter field -- yields False
+    field = 'spt3g-winter'
+    ra, dec = 290, -57.5
+    inside = False
+    test_coverage(ra, dec, field, inside)
+
+    # inside winter field -- yields True
+    ra, dec = 0.0, -57.5
+    inside = True
+    test_coverage(ra, dec, field, inside)
+
+    # Inside wide field
+    field = 'spt3g-widef'
+    ra, dec = 160, -50
+    inside = True
+    test_coverage(ra, dec, field, inside)

@@ -961,6 +961,7 @@ def in_uniform_coverage(ra, dec, field):
     else:
         in_field = False
 
+    LOGGER.debug(f"crossRA0: {crossRA0}")
     LOGGER.debug(f"RA:{ra}, DEC:{dec}")
     LOGGER.debug(f"range: {ra_range},{dec_range}")
     LOGGER.debug(f"in_field:{in_field}")
@@ -1149,6 +1150,10 @@ def get_field_extent(
         (ra[1] * deg + ra_pad) % (360 * deg),
     )
     dec = (dec[0] * deg - dec_pad, dec[1] * deg + dec_pad)
+
+    # Added for cutter -- we convert back to degrees
+    ra = (ra[0]/deg, ra[1]/deg)
+    dec = (dec[0]/deg, dec[1]/deg)
 
     return ra, dec
 
