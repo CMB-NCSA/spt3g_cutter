@@ -452,6 +452,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
     if 'EXTNAME' in header['SCI'] and header['SCI']['EXTNAME'].strip() == 'COMPRESSED_IMAGE':
         NAXIS1 = header['SCI']['ZNAXIS1']
         NAXIS2 = header['SCI']['ZNAXIS2']
+    elif 'ZIMAGE' in header['SCI'] and header['SCI']['ZIMAGE'] is True:
+        NAXIS1 = header['SCI']['ZNAXIS1']
+        NAXIS2 = header['SCI']['ZNAXIS2']
     else:
         NAXIS1 = header['SCI']['NAXIS1']
         NAXIS2 = header['SCI']['NAXIS2']
@@ -467,6 +470,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
     # Extract OBSID from the header
     if 'OBS-ID' in header['SCI']:
         obsid = str(header['SCI']['OBS-ID']).strip()
+    elif 'OBSID' in header['SCI']:
+        obsid = str(header['SCI']['OBSID']).strip()
     else:
         raise Exception("ERROR: Cannot provide suitable OBS-ID from SCI header")
 
@@ -474,8 +479,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
     if 'FILETYPE' in header['SCI']:
         filetype = str(header['SCI']['FILETYPE']).strip()
     else:
+        filetype = 'filtered'
         # Try to get it from the filename
-        raise Exception("ERROR: Cannot provide suitable FILETYPE from SCI header")
+        # raise Exception("ERROR: Cannot provide suitable FILETYPE from SCI header")
 
     if 'DATE-BEG' in header['SCI']:
         date_beg = str(header['SCI']['DATE-BEG']).strip()
@@ -490,6 +496,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
     # Get OBJECT, we will use as fieldname
     if 'OBJECT' in header['SCI']:
         object = str(header['SCI']['OBJECT']).strip()
+    elif 'FIELD' in header['SCI']:
+        object = str(header['SCI']['FIELD']).strip()
     else:
         raise Exception("ERROR: Cannot provide suitable OBJECT from SCI header")
     # Check for object=None on yearly maps
@@ -538,7 +546,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         h_section = OrderedDict()
 
         # Define the geometry of the thumbnail
-        x0, y0 = wcs.wcs_world2pix(ra[k], dec[k], 1)
+        x0, y0 = wcs.wcs_world2pix(ra[k], dec[k], 0)
         x0 = round(float(x0))
         y0 = round(float(y0))
         dx = int(0.5*xsize[k]*scale/pixelscale)
