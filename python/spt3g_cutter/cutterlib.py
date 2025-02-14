@@ -51,7 +51,8 @@ FITS_OUTNAME = "{outdir}/{objID}_{filter}_{obsid}_{filetype_ext}.{ext}"
 LOG_OUTNAME = "{outdir}/{objID}.{ext}"
 BASE_OUTNAME = "{objID}"
 BASEDIR_OUTNAME = "{outdir}/{objID}"
-FILETYPE_EXT = {'passthrough': 'psth', 'filtered': 'fltd'}
+FILETYPE_EXT = {'passthrough': 'psth', 'filtered': 'fltd', 'None': ''}
+FITS_LC_OUTNAME = "{outdir}/lightcurve_{filter}_{filetype_ext}.{ext}"
 
 
 def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
@@ -244,6 +245,15 @@ def check_inputs(ra, dec, xsize, ysize, objID=None):
     return ra, dec, xsize, ysize, objID
 
 
+def get_lightcurveFitsName(filter, filetype_ext,
+                           refix=PREFIX, ext='fits', outdir=os.getcwd()):
+    """ Common function to set the Fits lightcurve name """
+    # Locals need to be captured at the end
+    kw = locals()
+    outname = FITS_LC_OUTNAME.format(**kw)
+    return outname
+
+
 def get_thumbFitsName(ra, dec, filter, obsid, filetype_ext,
                       objID=None, prefix=PREFIX, ext='fits', outdir=os.getcwd()):
     """ Common function to set the Fits thumbnail name """
@@ -357,7 +367,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
                objID=None, xsize=1.0, ysize=1.0, units='arcmin', get_lightcurve=False,
                prefix=PREFIX, outdir=None, clobber=True, logger=None, counter='',
                get_uniform_coverage=False, nofits=False,
-               stage=False, stage_prefix='spt-dummy'):
+               stage=False, stage_prefix='spt-dummy', obsid_names=False):
 
     """
     Makes cutouts around ra, dec for a give xsize and ysize
@@ -479,9 +489,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
     if 'FILETYPE' in header['SCI']:
         filetype = str(header['SCI']['FILETYPE']).strip()
     else:
-        filetype = 'filtered'
-        # Try to get it from the filename
-        # raise Exception("ERROR: Cannot provide suitable FILETYPE from SCI header")
+        filetype = 'None'
 
     if 'DATE-BEG' in header['SCI']:
         date_beg = str(header['SCI']['DATE-BEG']).strip()
@@ -540,7 +548,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         # The basename for the (ra,dec)
         if objID[k] is None:
             objID[k] = get_thumbBaseName(ra[k], dec[k], prefix=prefix)
-
+        logger.debug(f"Defined objID: {objID[k]}")
         # image and header sections
         im_section = OrderedDict()
         h_section = OrderedDict()
@@ -642,6 +650,17 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
                                     objID=objID[k], prefix=prefix, outdir=basedir)
         # Save the outnames without the output directory
         outnames.append(outname.replace(f"{outdir}/", ''))
+
+        # Keep the objID information
+        if obsid_names:
+            if objID[k] not in cutout_names:
+                cutout_names[objID[k]] = {}
+            if band not in cutout_names[objID[k]].keys():
+                cutout_names[objID[k]][band] = []
+            # cutout_names[objID[k]][band].append(outname.replace(f"{outdir}/", ''))
+            cutout_names[objID[k]][band].append(outname)
+
+
         # Write out the file
         t0 = time.time()
         ofits = fitsio.FITS(outname, 'rw', clobber=clobber)
@@ -654,7 +673,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
     logger.info(f"Done filename: {filename} in {elapsed_time(t1)} -- {counter}")
 
     # Assigning internal lists/dict to managed dictionaries
-    cutout_names[filename] = outnames
+    if obsid_names is False:
+        cutout_names[filename] = outnames
     rejected_names[filename] = rejected_ids
 
     if get_lightcurve:
@@ -790,10 +810,10 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
     "Repack the lightcurve dictionary keyed by objID"
 
     t0 = time.time()
-    LOGGER.info(f"Repacking lightcurve information for {BAND}, {FILETYPE}")
-    LOGGER.info(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
+    LOGGER.info(f"Repacking lightcurve information for band: {BAND}, filetype: {FILETYPE}")
+    LOGGER.debug(f"Memory: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 3} Gb")
     process = psutil.Process(os.getpid())
-    LOGGER.info(f"Memory percent: {process.memory_percent()} %")
+    LOGGER.debug(f"Memory percent: {process.memory_percent()} %")
 
     # Select only the observation for the BAND/FILETYPE combination
     observations = args.obs_dict[BAND][FILETYPE]
@@ -877,8 +897,9 @@ def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
 
     t0 = time.time()
     max_epochs = 15000  # this has maximum number of epochs as 15k for fits table format
-    fits_file = os.path.join(args.outdir, f"lightcurve_{BAND}_{FILETYPE}.fits")
-    LOGGER.info(f"Writing lightcurve to: {fits_file}")
+    fits_file = get_lightcurveFitsName(BAND, FILETYPE, outdir=args.outdir)
+
+    # LOGGER.info(f"Writing lightcurve to: {fits_file}")
     # Nested dictionaries cannot be sliced, so going through pandas route :(
     # as well as re-orienting
     df = pandas.DataFrame.from_dict(lc, orient='index')
