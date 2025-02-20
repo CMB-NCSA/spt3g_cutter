@@ -540,6 +540,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         lc_local['DATE-END'] = date_end
         lc_local['BAND'] = band
         lc_local['FILETYPE'] = filetype
+        lc_local['OBSID'] = obsid
 
     ######################################
     # Loop over ra/dec and xsize,ysize
@@ -826,6 +827,7 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
         dates_end = []
         flux_SCI = []
         flux_WGT = []
+        obsids = []
         # Loop over the observations (OBS-ID + filetype)
         for obs in observations:
 
@@ -833,6 +835,7 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
                 LOGGER.debug(f"Ignoring {objID} for {obs} -- rejected")
                 continue
 
+            OBSID = lightcurve[obs]['OBSID']
             DATE_BEG = lightcurve[obs]['DATE-BEG']
             DATE_END = lightcurve[obs]['DATE-END']
             DATE_AVE = get_mean_date(DATE_BEG, DATE_END)
@@ -851,6 +854,8 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
                     dates_ave.append(DATE_AVE)
                     dates_beg.append(DATE_BEG)
                     dates_end.append(DATE_END)
+                    # storing obsid
+                    obsids.append(OBSID)
                     # storing flux
                     flux_sci = lightcurve[obs]['flux_SCI'][idx]
                     flux_SCI.append(flux_sci)
@@ -868,6 +873,7 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
             LC[objID]['dates_ave'] = Time(dates_ave).mjd     # converting the date array to mjd
             # LC[objID]['dates_beg'] = dates_beg
             # LC[objID]['dates_end'] = dates_end
+            LC[objID]['obsids'] = obsids
             LC[objID]['flux_SCI'] = flux_SCI
             LC[objID]['flux_WGT'] = flux_WGT
 
@@ -912,9 +918,13 @@ def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
                        array=np.array(list(dict['flux_SCI'].values()), dtype=object), unit='mJy')
     col4 = fits.Column(name='flux_WGT', format=f'PD({max_epochs})',
                        array=np.array(list(dict['flux_WGT'].values()), dtype=object))
-    hdu = fits.BinTableHDU.from_columns([col1, col2, col3, col4])
+    col5 = fits.Column(name='obsids', format=f'PD({max_epochs})',
+                       array=np.array(list(dict['obsids'].values()), dtype=object))
+    hdu = fits.BinTableHDU.from_columns([col1, col2, col3, col4, col5])
     hdu.header.set('TELESCOP', 'South Pole Telescope')
     hdu.header.set('INSTRUME', 'SPT-3G')
+    hdu.header.set('BAND', BAND)
+
     hdu.writeto(fits_file, overwrite=True)
     LOGGER.info(f"Wrote lightcurve file to: {fits_file} in: {elapsed_time(t0)}")
 
