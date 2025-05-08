@@ -1,4 +1,5 @@
-from setuptools import setup
+#!/usr/bin/env python3
+from distutils.core import setup
 import glob
 
 bin_files = glob.glob("bin/*")
