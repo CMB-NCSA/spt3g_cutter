@@ -7,8 +7,9 @@ bin_files = glob.glob("bin/*")
 # Build the structure for etc folder
 etc_dirs = ['etc']
 data_files = [("", ["setpath.sh"])]
-for edir in etc_dirs:
-    data_files.append((edir, glob.glob("{}/*".format(edir))))
+# In case we want files in etc
+# for edir in etc_dirs:
+#     data_files.append((edir, glob.glob("{}/*".format(edir))))
 
 
 # The main call
