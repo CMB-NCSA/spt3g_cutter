@@ -14,7 +14,7 @@ setup(
     author_email="felipe@illinois.edu",
     packages=['spt3g_cutter'],
     package_dir={'': 'python'},
-    scripts=bin_files,
+    # scripts=bin_files,
     package_data={'': ['LICENSE']},
     data_files=data_files,
 )
