@@ -798,11 +798,10 @@ def get_obs_dictionary(lightcurve):
     for obs in lightcurve:
         FILETYPE = lightcurve[obs]['FILETYPE']
         BAND = lightcurve[obs]['BAND']
-
         if BAND not in obs_dict:
             obs_dict[BAND] = {}
-            if FILETYPE not in obs_dict[BAND]:
-                obs_dict[BAND][FILETYPE] = []
+        if FILETYPE not in obs_dict[BAND]:
+            obs_dict[BAND][FILETYPE] = []
         obs_dict[BAND][FILETYPE].append(obs)
     return obs_dict
 
