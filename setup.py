@@ -6,12 +6,12 @@ data_files = [("", ["setpath.sh"])]
 
 setup(
     name='spt3g_ingest',
-    version='0.4.0',
+    version='0.4.4',
     license="GPL",
-    description="Ingesting for SPT3G",
+    description="Thumbnail cutter for SPT3G",
     author="Felipe Menanteau",
     author_email="felipe@illinois.edu",
-    packages=['spt3g_ingest'],
+    packages=['spt3g_cutter'],
     package_dir={'': 'python'},
     scripts=bin_files,
     package_data={'': ['LICENSE']},
