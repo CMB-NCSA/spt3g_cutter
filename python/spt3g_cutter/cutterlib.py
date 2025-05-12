@@ -782,11 +782,11 @@ def get_mean_date(date1, date2):
         D1 = pandas.to_datetime(date1)
         D2 = pandas.to_datetime(date2)
         date_mean = pandas.Timestamp((D1.value + D2.value)/2.).isoformat()
-    except (TypeError, dateutil.parser._parser.ParserError):
+    except (TypeError, dateutil.parser._parser.ParserError, pandas._libs.tslibs.parsing.DateParseError):
         date_mean = date1
         # add a warning for getting yearly map if required.
         # This should not be in the light curve
-        LOGGER.debug(f"Ran into yearly  map: {date1}")
+        LOGGER.warning(f"Ran into yearly map: {date1}")
     return date_mean
 
 
@@ -837,6 +837,8 @@ def repack_lightcurve_band_filetype(lightcurve, BAND, FILETYPE, args):
             OBSID = lightcurve[obs]['OBSID']
             DATE_BEG = lightcurve[obs]['DATE-BEG']
             DATE_END = lightcurve[obs]['DATE-END']
+            LOGGER.debug(f"{obs} DATE_BEG: {DATE_BEG}")
+            LOGGER.debug(f"{obs} DATE_END: {DATE_END}")
             DATE_AVE = get_mean_date(DATE_BEG, DATE_END)
             if DATE_AVE.find('yearly') != -1:
                 LOGGER.debug(f"Ignoring {objID} for {obs} -- yearly map")
