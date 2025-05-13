@@ -1,5 +1,5 @@
 __author__ = "Felipe Menanteau"
-__version__ = "0.4.5"
+__version__ = "0.4.6"
 version = __version__
 
 from . import cutterlib
