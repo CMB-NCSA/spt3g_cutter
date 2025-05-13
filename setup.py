@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 import glob
 
 # Get the scripts/bin files
@@ -9,7 +9,6 @@ etc_dirs = ['etc']
 data_files = [("", ["setpath.sh"])]
 for edir in etc_dirs:
     data_files.append((edir, glob.glob("{}/*".format(edir))))
-
 
 # The main call
 setup(name='spt3g_cutter',
@@ -23,4 +22,6 @@ setup(name='spt3g_cutter',
       scripts=bin_files,
       package_data={'': ['LICENSE']},
       data_files=data_files,
+      include_package_data=True,
+      zip_safe=False,
       )
