@@ -17,6 +17,7 @@ def cmdline():
 
     # Make a proto-parse use to read in the default yaml configuration
     # file, Turn off help, so we print all options in response to -h
+    version = f"spt3g_cutter: {spt3g_cutter.__version__}"
     conf_parser = argparse.ArgumentParser(add_help=False)
     conf_parser.add_argument("-c", "--configfile", help="SPT3G config file")
     args, remaining_argv = conf_parser.parse_known_args()
@@ -45,12 +46,14 @@ def cmdline():
     # DB options
     parser.add_argument("--dbname", type=str, action='store', default=None,
                         help="Database (file) to connect")
-    parser.add_argument("--tablename", type=str, action='store', default='file_info_v2',
+    parser.add_argument("--tablename", type=str, action='store', default='fitsinfo',
                         help="Name of tablw with file informatiom")
     parser.add_argument("--bands", nargs="*", default=['90GHz', '150GHz', '220GHz'],
                         help="The bands to select from: 90GHz, 150GHz and 220GHz")
-    parser.add_argument("--filetypes", nargs="*", default=['passthrough', 'filtered'],
-                        help="The filetype to select: 'passthrough/filtered'")
+    parser.add_argument("--filetypes", nargs="*", default=['PSTH', 'FLTD', 'CFLTD'],
+                        choices=['PSTH', 'FLTD', 'CFLTD'],
+                        help="The filetype to select: "
+                        "'PSTH(passthrough)/(FLTD)filtered/(CFTD)coadd-filtered'")
     parser.add_argument("--date_start", type=str, action='store', default=None,
                         help="The START date to search for files formatted [YYYY-MM-DD]")
     parser.add_argument("--date_end", type=str, action='store', default=None,
@@ -59,7 +62,7 @@ def cmdline():
                         help="The yearly tag or tags to use [i.e. yearly_winter_2020]")
     parser.add_argument("--get_lightcurve", action='store_true', default=False,
                         help="Extract light curve at pixel position for each object")
-    parser.add_argument("--version", action="version", version=f"spt3g_cutter: {spt3g_cutter.__version__}",
+    parser.add_argument("--version", action="version", version=version,
                         help="Print version and exit")
     parser.add_argument("--get_uniform_coverage", action='store_true', default=False,
                         help="Get only objects within the uniform coverage")

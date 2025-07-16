@@ -51,7 +51,7 @@ FITS_OUTNAME = "{outdir}/{objID}_{filter}_{obsid}_{filetype_ext}.{ext}"
 LOG_OUTNAME = "{outdir}/{objID}.{ext}"
 BASE_OUTNAME = "{objID}"
 BASEDIR_OUTNAME = "{outdir}/{objID}"
-FILETYPE_EXT = {'passthrough': 'psth', 'filtered': 'fltd', 'None': ''}
+FILETYPE_EXT = {'PSTH': 'psth', 'FLTD': 'fltd', 'CFLTD': 'cfltd', 'None': ''}
 FITS_LC_OUTNAME = "{outdir}/lightcurve_{filter}_{filetype_ext}.{ext}"
 
 
@@ -661,7 +661,6 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
             # cutout_names[objID[k]][band].append(outname.replace(f"{outdir}/", ''))
             cutout_names[objID[k]][band].append(outname)
 
-
         # Write out the file
         t0 = time.time()
         ofits = fitsio.FITS(outname, 'rw', clobber=clobber)
@@ -904,7 +903,7 @@ def write_lightcurve_band_filetype(lc, BAND, FILETYPE, args):
 
     t0 = time.time()
     max_epochs = 15000  # this has maximum number of epochs as 15k for fits table format
-    fits_file = get_lightcurveFitsName(BAND, FILETYPE, outdir=args.outdir)
+    fits_file = get_lightcurveFitsName(BAND, FILETYPE_EXT[FILETYPE], outdir=args.outdir)
 
     # LOGGER.info(f"Writing lightcurve to: {fits_file}")
     # Nested dictionaries cannot be sliced, so going through pandas route :(

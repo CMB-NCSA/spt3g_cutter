@@ -53,6 +53,7 @@ def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=N
 
     # Formatting filetypes
     if filetypes:
+        # short_filetypes = [FILETYPE[ftype] for ftype in filetypes]
         in_filetypes = ','.join("\'{}\'".format(s) for s in filetypes)
         and_filetypes = f"FILETYPE in ({in_filetypes})"
         if bands is not None:
@@ -89,8 +90,8 @@ def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=N
 def connect_db(dbname):
     """Establish connection to DB"""
     logger.info(f"Establishing DB connection to: {dbname}")
-    # SQLlite DB lives in a file
-    con = sqlite3.connect(dbname)
+    # SQLlite DB lives in a file, we do a read-only connection
+    con = sqlite3.connect(f'file:{dbname}?mode=ro', uri=True)
     return con
 
 
