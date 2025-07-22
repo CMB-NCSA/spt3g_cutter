@@ -10,15 +10,16 @@ import os
 import sys
 import spt3g_cutter
 import spt3g_cutter.astrometry as astrometry
+import spt3g_cutter.fields as fields
 import time
 import numpy
 import copy
 from collections import OrderedDict
 from astropy.wcs import WCS
-from astropy.utils.exceptions import AstropyWarning
+# from astropy.utils.exceptions import AstropyWarning
 import logging
 from logging.handlers import RotatingFileHandler
-import warnings
+# import warnings
 import multiprocessing
 import yaml
 import datetime
@@ -35,11 +36,8 @@ from astropy.time import Time
 import json
 from multiprocessing.managers import DictProxy
 
-core_G3Units_deg = 0.017453292519943295
-core_G3Units_rad = 1
-
 # To avoid header warning from astropy
-warnings.filterwarnings('ignore', category=AstropyWarning, append=True)
+# warnings.filterwarnings('ignore', category=AstropyWarning, append=True)
 
 # Logger
 LOGGER = logging.getLogger(__name__)
@@ -452,11 +450,8 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
     extnames = header.keys()  # Gets SCI and WGT
     logger.debug(f"Found EXTNAMES:{extnames}")
 
-    # Get the pixel-scale of the input image
-    pixelscale = astrometry.get_pixelscale(header['SCI'], units='arcsec')
-
-    # Read in wcs with astropy
-    wcs = WCS(header['SCI'])
+    # Fix DATE-END if set to None to avoid astropy warnings
+    fix_date_END(header)
 
     # Get the dimensions of the parent image
     if 'EXTNAME' in header['SCI'] and header['SCI']['EXTNAME'].strip() == 'COMPRESSED_IMAGE':
@@ -468,6 +463,12 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
     else:
         NAXIS1 = header['SCI']['NAXIS1']
         NAXIS2 = header['SCI']['NAXIS2']
+    logger.debug(f"Found NAXIS1, NAXIS2: ({NAXIS1},{NAXIS2}) for: {filename}")
+
+    # Get the pixel-scale of the input image
+    pixelscale = astrometry.get_pixelscale(header['SCI'], units='arcsec')
+    # Read in wcs with astropy
+    wcs = WCS(header['SCI'])
 
     # Extract the band/filter from the header
     if 'BAND' in header['SCI']:
@@ -502,16 +503,18 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         raise Exception("ERROR: Cannot provide suitable DATE-END from SCI header")
 
     # Get OBJECT, we will use as fieldname
-    if 'OBJECT' in header['SCI']:
-        object = str(header['SCI']['OBJECT']).strip()
-    elif 'FIELD' in header['SCI']:
+    if 'FIELD' in header['SCI']:
         object = str(header['SCI']['FIELD']).strip()
+    elif 'OBJECT' in header['SCI']:
+        object = str(header['SCI']['OBJECT']).strip()
     else:
         raise Exception("ERROR: Cannot provide suitable OBJECT from SCI header")
+
     # Check for object=None on yearly maps
     if object == 'None' and obsid.find('yearly') != -1:
         object = 'yearly'
         LOGGER.warning(f"Updating field to: {object}")
+        header['SCI']['DATE-END'] = header['SCI']['DATE-BEG']
 
     # The extension to use for FILETYPE
     filetype_ext = FILETYPE_EXT[filetype]
@@ -569,14 +572,14 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
 
         # Check if in field extent
         if get_uniform_coverage and not in_uniform_coverage(ra[k], dec[k], object):
-            LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} outside field extent")
+            LOGGER.debug(f"WARNING: object:{k} (RA,DEC):{ra[k]},{dec[k]} outside field extent")
             rejected_ids.append(objID[k])
             continue
 
         # Make sure the (x0,y0) is contained within the image
         if x0 < 0 or y0 < 0 or x0 > NAXIS1 or y0 > NAXIS2:
-            LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} outside {filename}")
-            LOGGER.debug(f"(x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
+            LOGGER.debug(f"WARNING object:{k} (RA,DEC):{ra[k]},{dec[k]} outside {filename}")
+            LOGGER.debug(f"WARNING object:{k} (x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
             rejected_ids.append(objID[k])
             continue
 
@@ -592,9 +595,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
             x2 = NAXIS1
 
         LOGGER.debug(f"Working on object:{k} -- {objID[k]}")
-        LOGGER.debug(f"Found naxis1,naxis2: {naxis1},{naxis2}")
-        LOGGER.debug(f"Found x1,x2: {x1},{x2}")
-        LOGGER.debug(f"Found y1,y2: {y1},{y2}")
+        LOGGER.debug(f"Defined stamp naxis1,naxis2: {naxis1},{naxis2}")
+        LOGGER.debug(f"Defined stamp x1,x2: {x1},{x2}")
+        LOGGER.debug(f"Defined stamp y1,y2: {y1},{y2}")
 
         # Append data from (x0, y0) pixel for both extensions
         if get_lightcurve:
@@ -602,12 +605,13 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
             HDU_WGT = hdunum['WGT']
             try:
                 data_WGT = float(ifits[HDU_WGT][int(y0), int(x0)][0][0])
+                data_SCI = float(ifits[HDU_SCI][int(y0), int(x0)][0][0])
                 if data_WGT != 0.0:
                     data_SCI = float(ifits[HDU_SCI][int(y0), int(x0)][0][0])
                 else:
-                    LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} zero flux weight")
-                    rejected_ids.append(objID[k])
-                    continue
+                    LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} zero flux weight: {data_WGT}")
+                    # rejected_ids.append(objID[k])
+                    # continue
             except Exception as e:
                 logger.error(e)
                 data_SCI = float("NaN")
@@ -667,7 +671,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         for EXTNAME in extnames:
             ofits.write(im_section[EXTNAME], extname=EXTNAME, header=h_section[EXTNAME])
         ofits.close()
-        logger.debug(f"Done writing {outname}: {elapsed_time(t0)}")
+        logger.debug(f"Done writing object:{k} to {outname}: {elapsed_time(t0)}")
 
     ifits.close()
     logger.info(f"Done filename: {filename} in {elapsed_time(t1)} -- {counter}")
@@ -976,7 +980,7 @@ def in_uniform_coverage(ra, dec, field):
     """Returns True/False if a (ra,dec) pair is in an spt3f field"""
 
     # Get the extent, using default padding
-    ra_range, dec_range = get_field_extent(field, ra_pad=0, dec_pad=0)
+    ra_range, dec_range = fields.get_field_extent(field, ra_pad=0, dec_pad=0)
 
     ra_range = list(ra_range)
     dec_range = list(dec_range)
@@ -1006,316 +1010,6 @@ def in_uniform_coverage(ra, dec, field):
     LOGGER.debug(f"in_field:{in_field}")
 
     return in_field
-
-
-# Function lifted from:
-# https://github.com/SouthPoleTelescope/spt3g_software/blob/6639f82dab922d583f8bd1eaf94ea6938d1ab0c1/sources/python/fields.py#L357
-def get_field_extent(
-    field,
-    ra_pad=3 * core_G3Units_deg,
-    dec_pad=2 * core_G3Units_deg,
-    sky_pad=True,
-):
-    """
-    Get the extent of the given field.
-
-    RA angles are always given between 0 and 360 degrees, with the left edge of
-    the field given first. Dec angles are given between -90 and 90 degrees,
-    with the lower edge of the field given first.
-
-    For example, the SPT-3G winter field "ra0hdec-44.75" has ra range (310, 50)
-    degrees, and dec range (-47.5, -42) degrees.
-
-    The default padding parameters ensure that the extent of the SPT-3G fields
-    covers the area that any bolometer on the focal plane may touch.  Setting
-    the padding parameters to 0 instead returns the part of the field that has
-    uniformly weighted coverage.  Padding in ra is defined in terms of degrees
-    on the sky if ``sky_pad`` is True.
-
-    The same padding considerations are not taken into account for the SPT-SZ
-    and SPTpol fields.
-
-    Arguments
-    ---------
-    field : str
-        Name of the field
-    ra_pad : float
-        Padding to apply to extent in ra, in G3Units.  Values > 0 extend the
-        field outward, and values < 0 shrink the field inward.  Set to 0 to
-        select the uniformly weighted coverage region of the field.  If
-        ``sky_pad`` is True, the padding is determined in terms of true degrees
-        on the sky.
-    dec_pad : float
-        Padding to apply to extent in dec, in G3Units. Values > 0 extend the
-        field outward, and values < 0 shrink the field inward.  Set to 0 to
-        select the uniformly weighted coverage region of the field.
-    sky_pad : bool
-        If True, ``ra_pad`` is in terms of true degrees on the sky.  Otherwise,
-        it is applied directly to the ra extent without correction.
-
-    Returns
-    -------
-    ra_range : 2-tuple of floats
-        Tuple of (min, max), the field extent in ra, in G3Units.
-    dec_range : 2-tuple of floats, in G3Units
-        Tuple of (min, max), the field extent in dec, in G3Units.
-    """
-    field = get_field_name(field)
-
-    extents = {
-        # sptsz fields
-        "ra21hdec-42.5": ((300, 330), (-45, -40)),
-        "ra21hdec-50": ((300, 330), (-55, -45)),
-        "ra21hdec-60": ((300, 330), (-65, -55)),
-        "ra22h30dec-55": ((330, 345), (-60, -50)),
-        "ra23hdec-45": ((330, 360), (-50, -40)),
-        "ra23hdec-62.5": ((330, 360), (-65, -60)),
-        "ra23h30dec-55": ((345, 360), (-60, -50)),
-        "ra0h50dec-50": ((0, 25), (-55, -45)),
-        "ra1hdec-42.5": ((0, 30), (-45, -40)),
-        "ra1hdec-60": ((0, 30), (-65, -55)),
-        "ra2h30dec-50": ((25, 50), (-55, -45)),
-        "ra3h30dec-42.5": ((30, 75), (-45, -40)),
-        "ra3h30dec-60": ((30, 75), (-65, -55)),
-        "ra4h10dec-50": ((50, 75), (-55, -45)),
-        "ra5h30dec-45": ((75, 90), (-50, -40)),
-        "ra5h30dec-55": ((75, 90), (-60, -50)),
-        "ra6hdec-62.5": ((75, 105), (-65, -60)),
-        "ra6h30dec-45": ((90, 105), (-50, -40)),
-        "ra6h30dec-55": ((90, 105), (-60, -50)),
-        "sptsz": ((300, 105), (-65, -40)),
-        # sptpol fields
-        "sptpol-100d": ((345, 360), (-60, -50)),
-        "sptpol-500d": ((330, 30), (-65, -50)),
-        "sptpol-kids": ((330, 52.5), (-36, -26)),
-        "ra23hdec-25": ((330, 360), (-30, -20)),
-        "ra23hdec-35": ((330, 360), (-40, -30)),
-        "ra1hdec-25": ((0, 30), (-30, -20)),
-        "ra1hdec-35": ((0, 30), (-40, -30)),
-        "ra3hdec-25": ((30, 60), (-30, -20)),
-        "ra3hdec-35": ((30, 60), (-40, -30)),
-        "ra5hdec-25": ((60, 90), (-30, -20)),
-        "ra5hdec-35": ((60, 90), (-40, -30)),
-        "sptpol-ecs": ((330, 90), (-40, -20)),
-        "ra11hdec-25": ((150, 180), (-30, -20)),
-        "ra13hdec-25": ((180, 210), (-30, -20)),
-        "sptpol-ecs-back": ((150, 210), (-30, -20)),
-        # spt3g fields
-        "ra0hdec-44.75": ((310, 50), (-47.5, -42)),
-        "ra0hdec-52.25": ((310, 50), (-55, -49.5)),
-        "ra0hdec-59.75": ((310, 50), (-62.5, -57)),
-        "ra0hdec-67.25": ((310, 50), (-70, -64.5)),
-        "spt3g-winter": ((310, 50), (-70, -42)),
-        "ra5hdec-24.5": ((50, 100), (-27, -22)),
-        "ra5hdec-31.5": ((50, 100), (-34, -29)),
-        "ra5hdec-38.5": ((50, 100), (-41, -36)),
-        "ra5hdec-45.5": ((50, 100), (-48, -43)),
-        "ra5hdec-52.5": ((50, 100), (-55, -50)),
-        "ra5hdec-59.5": ((50, 100), (-62, -57)),
-        "ra5hdec-29.75": ((50, 100), (-30.5, -29)),
-        "ra5hdec-33.25": ((50, 100), (-34, -32.5)),
-        "ra5hdec-36.75": ((50, 100), (-37.5, -36)),
-        "ra5hdec-40.25": ((50, 100), (-41, -39.5)),
-        "spt3g-summera": ((50, 100), (-62, -29)),
-        "ra1h40dec-29.75": ((0, 50), (-30.5, -29)),
-        "ra1h40dec-33.25": ((0, 50), (-34, -32.5)),
-        "ra1h40dec-36.75": ((0, 50), (-37.5, -36)),
-        "ra1h40dec-40.25": ((0, 50), (-41, -39.5)),
-        "spt3g-summerb": ((0, 50), (-41, -29)),
-        "ra12h30dec-29.75": ((150, 225), (-30.5, -29)),
-        "ra12h30dec-33.25": ((150, 225), (-34, -32.5)),
-        "ra12h30dec-36.75": ((150, 225), (-37.5, -36)),
-        "ra12h30dec-40.25": ((150, 225), (-41, -39.5)),
-        "spt3g-summerc": ((150, 225), (-41, -29)),
-        "j1745-290": ((266.1067, 266.7267), (-29.0028, -29.0128)),
-        "spt3g-sgrastar": ((266.1067, 266.7267), (-29.0028, -29.0128)),
-        "ra17h45dec-29": ((259.25, 273.25), (-30.5, -27.5)),
-        "ra17h37dec-32": ((257.25, 271.25), (-33.5, -30.5)),
-        "ra17h27dec-35": ((254.75, 268.75), (-36.5, -33.5)),
-        "spt3g-galaxy": ((254.75, 273.25), (-36.5, -27.5)),
-        "ra4h03dec-21": ((14.5, 107), (-21.5, -20.5)),
-        "ra4h03dec-23": ((14.5, 107), (-23.5, -22.5)),
-        "ra4h03dec-25": ((14.5, 107), (-25.5, -24.5)),
-        "ra4h03dec-27": ((14.5, 107), (-27.5, -26.5)),
-        "spt3g-widea": ((14.5, 107), (-27.5, -20.5)),
-        "ra21h53dec-21": ((-78, 14.5), (-21.5, -20.5)),
-        "ra21h53dec-23": ((-78, 14.5), (-23.5, -22.5)),
-        "ra21h53dec-25": ((-78, 14.5), (-25.5, -24.5)),
-        "ra21h53dec-27": ((-78, 14.5), (-27.5, -26.5)),
-        "spt3g-wideb": ((-78, 14.5), (-27.5, -20.5)),
-        "ra12hdec-21": ((120, 240), (-21.5, -20.5)),
-        "ra12hdec-23": ((120, 240), (-23.5, -22.5)),
-        "ra12hdec-25": ((120, 240), (-25.5, -24.5)),
-        "ra12hdec-27": ((120, 240), (-27.5, -26.5)),
-        "spt3g-widec": ((120, 240), (-27.5, -20.5)),
-        "ra21h10dec-29.75": ((-85, 0), (-30.5, -29)),
-        "ra21h10dec-33.25": ((-85, 0), (-34, -32.5)),
-        "ra21h10dec-36.75": ((-85, 0), (-37.5, -36)),
-        "ra21h10dec-40.25": ((-85, 0), (-41, -39.5)),
-        "spt3g-wided": ((-85, 0), (-41, -29)),
-        "ra18h40dec-45.5": ((-110, -50), (-48, -43)),
-        "ra18h40dec-52.5": ((-110, -50), (-55, -50)),
-        "ra18h40dec-59.5": ((-110, -50), (-62, -57)),
-        "ra18h40dec-66.5": ((-110, -50), (-69, -64)),
-        "spt3g-widee": ((-110, -50), (-69, -43)),
-        "ra12h30dec-45": ((150, 225), (-47, -43)),
-        "ra12h30dec-51": ((150, 225), (-53, -49)),
-        "spt3g-widef": ((150, 225), (-53, -43)),
-        "ra6h40dec-66.5": ((50, 150), (-69, -64)),
-        "ra6h40dec-75": ((50, 150), (-79, -71)),
-        "ra6h40dec-72.5": ((50, 150), (-74, -71)),
-        "ra6h40dec-77.5": ((50, 150), (-79, -76)),
-        "spt3g-wideg": ((50, 150), (-79, -64)),
-        "ra23hdec-72.5": ((-80, 50), (-74, -71)),
-        "ra23hdec-77.5": ((-80, 50), (-79, -76)),
-        "spt3g-wideh": ((-80, 50), (-79, -71)),
-        "ra14h20dec-72.5": ((150, 280), (-74, -71)),
-        "ra14h20dec-77.5": ((150, 280), (-79, -76)),
-        "spt3g-widei": ((150, 280), (-79, -71)),
-        # Extra custom field for yearly -- added by FM
-        "yearly": ((306.25, 53.25), (-72, -40.25)),
-    }
-
-    ra, dec = extents[field]
-
-    # padding in true degrees ra
-    deg = core_G3Units_deg
-    if sky_pad:
-        ra_pad /= float(np.cos(np.max(np.abs(dec)) * deg / core_G3Units_rad))
-
-    # apply padding
-    ra = (
-        (ra[0] * deg - ra_pad) % (360 * deg),
-        (ra[1] * deg + ra_pad) % (360 * deg),
-    )
-    dec = (dec[0] * deg - dec_pad, dec[1] * deg + dec_pad)
-
-    # Added for cutter -- we convert back to degrees
-    ra = (ra[0]/deg, ra[1]/deg)
-    dec = (dec[0]/deg, dec[1]/deg)
-
-    return ra, dec
-
-
-# Function lifted from:
-# https://github.com/SouthPoleTelescope/spt3g_software/blob/6639f82dab922d583f8bd1eaf94ea6938d1ab0c1/sources/python/fields.py#L27
-def get_field_name(field):
-    """
-    Return the standard name for the given observing field.
-
-    Arguments
-    ---------
-    field : str
-        Field name, may be an alias
-
-    Returns
-    -------
-    field : str
-        Standard field name
-    """
-    field = field.lower()
-    if field in ["spt3g", "winter"]:
-        field = "spt3g-winter"
-    elif field in ["summera", "summer-a", "summer", "spt3g-summer"]:
-        field = "spt3g-summera"
-    elif field in ["summerb", "summer-b"]:
-        field = "spt3g-summerb"
-    elif field in ["summerc", "summer-c"]:
-        field = "spt3g-summerc"
-    elif field in ["sgrastar"]:
-        field = "spt3g-sgrastar"
-    elif field in ["ra17h46dec-29"]:
-        field = "j1745-290"
-    elif field in ["galaxy"]:
-        field = "spt3g-galaxy"
-    elif field in ["100d", "ra23h30dec-55"]:
-        field = "sptpol-100d"
-    elif field in ["500d", "ra0hdec-57.5"]:
-        field = "sptpol-500d"
-    elif field in ["kids", "ra0p75hdec-31"]:
-        field = "sptpol-kids"
-    elif field in ["ecs", "sptpol-summer"]:
-        field = "sptpol-ecs"
-    elif field in ["ecs-back", "sptpol-summer-back"]:
-        field = "sptpol-ecs-back"
-    elif field in ["widea", "wide-a"]:
-        field = "spt3g-widea"
-    elif field in ["wideb", "wide-b"]:
-        field = "spt3g-wideb"
-    elif field in ["widec", "wide-c"]:
-        field = "spt3g-widec"
-    elif field in ["wided", "wide-d"]:
-        field = "spt3g-wided"
-    elif field in ["widee", "wide-e"]:
-        field = "spt3g-widee"
-    elif field in ["widef", "wide-f"]:
-        field = "spt3g-widef"
-    elif field in ["wideg", "wide-g"]:
-        field = "spt3g-wideg"
-    elif field in ["wideh", "wide-h"]:
-        field = "spt3g-wideh"
-    elif field in ["widei", "wide-i"]:
-        field = "spt3g-widei"
-    elif field in ["a1"]:
-        field = "ra4h03dec-21"
-    elif field in ["a2"]:
-        field = "ra4h03dec-23"
-    elif field in ["a3"]:
-        field = "ra4h03dec-25"
-    elif field in ["a4"]:
-        field = "ra4h03dec-27"
-    elif field in ["b1"]:
-        field = "ra21h53dec-21"
-    elif field in ["b2"]:
-        field = "ra21h53dec-23"
-    elif field in ["b3"]:
-        field = "ra21h53dec-25"
-    elif field in ["b4"]:
-        field = "ra21h53dec-27"
-    elif field in ["c1"]:
-        field = "ra12hdec-21"
-    elif field in ["c2"]:
-        field = "ra12hdec-23"
-    elif field in ["c3"]:
-        field = "ra12hdec-25"
-    elif field in ["c4"]:
-        field = "ra12hdec-27"
-    elif field in ["d1"]:
-        field = "ra21h10dec-29.75"
-    elif field in ["d2"]:
-        field = "ra21h10dec-33.25"
-    elif field in ["d3"]:
-        field = "ra21h10dec-36.75"
-    elif field in ["d4"]:
-        field = "ra21h10dec-40.25"
-    elif field in ["e1"]:
-        field = "ra18h40dec-45.5"
-    elif field in ["e2"]:
-        field = "ra18h40dec-52.5"
-    elif field in ["e3"]:
-        field = "ra18h40dec-59.5"
-    elif field in ["e4"]:
-        field = "ra18h40dec-66.5"
-    elif field in ["f1"]:
-        field = "ra12h30dec-45"
-    elif field in ["f2"]:
-        field = "ra12h30dec-51"
-    elif field in ["g1"]:
-        field = "ra6h40dec-66.5"
-    elif field in ["g2"]:
-        field = "ra6h40dec-72.5"
-    elif field in ["g3"]:
-        field = "ra6h40dec-77.5"
-    elif field in ["h1"]:
-        field = "ra23hdec-72.5"
-    elif field in ["h2"]:
-        field = "ra23hdec-77.5"
-    elif field in ["i1"]:
-        field = "ra14h20dec-72.5"
-    elif field in ["i2"]:
-        field = "ra14h20dec-77.5"
-
-    return field
 
 
 def create_dir(dirname):
@@ -1353,6 +1047,14 @@ def remove_staged_file(fitsfile):
     tmp_dir = os.path.dirname(fitsfile)
     LOGGER.info(f"Removing tmp dir: {tmp_dir}")
     shutil.rmtree(tmp_dir)
+
+
+def fix_date_END(header):
+    extnames = header.keys()  # Gets SCI and WGT
+    for EXT in extnames:
+        if 'DATE-END' in header[EXT] and header[EXT]['DATE-END'] is None:
+            header[EXT]["DATE-END"] = header[EXT]["DATE-BEG"]
+            LOGGER.debug(f"Updating DATE-END to DATE-BEG for {EXT}")
 
 
 if __name__ == "__main__":
