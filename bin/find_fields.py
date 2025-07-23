@@ -63,7 +63,7 @@ for index, row in df.iterrows():
     print("# --- ")
 exit()
 
-#con = sqlite3.connect(db_path)
+# con = sqlite3.connect(db_path)
 
 results = find_field_season_radec(32.69245, -51.017, con)
 print(results)
