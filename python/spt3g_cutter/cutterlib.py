@@ -53,9 +53,20 @@ FILETYPE_EXT = {'PSTH': 'psth', 'FLTD': 'fltd', 'CFLTD': 'cfltd', 'None': ''}
 FITS_LC_OUTNAME = "{outdir}/lightcurve_{filter}_{filetype_ext}.{ext}"
 
 
-def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
+def configure_logger(logger, MP=False, logfile=None, level=logging.NOTSET,
+                     log_format=None, log_format_date=None):
     """
-    Configure an existing logger
+    Configure an existing logger with specified settings. Sets the format,
+    logging level, and handlers for the given logger. If a logfile is provided,
+    logs are written to both the console and the file with rotation. If no log
+    format or date format is provided, default values are used.
+
+    Parameters:
+    - logger (logging.Logger): The logger to configure.
+    - logfile (str, optional): Path to the log file. If `None`, logs to the console.
+    - level (int): Logging level (e.g., `logging.INFO`, `logging.DEBUG`).
+    - log_format (str, optional): Log message format (default is detailed format with function name).
+    - log_format_date (str, optional): Date format for logs (default is `'%Y-%m-%d %H:%M:%S'`).
     """
     # Define formats
     if log_format:
@@ -66,6 +77,11 @@ def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None
         FORMAT_DATE = log_format_date
     else:
         FORMAT_DATE = '%Y-%m-%d %H:%M:%S'
+
+    # Update logger to see process inforation
+    if MP is True:
+        FORMAT = FORMAT.replace("[%(levelname)s]", "[%(levelname)s-%(processName)s]")
+
     formatter = logging.Formatter(FORMAT, FORMAT_DATE)
 
     # Need to set the root logging level as setting the level for each of the
@@ -85,25 +101,63 @@ def configure_logger(logger, logfile=None, level=logging.NOTSET, log_format=None
         logger.addHandler(fh)
 
     # Set the screen handle
+    if logger_has_stdout_handler(logger):
+        print("Skipping adding stdout handler")
+        return
     sh = logging.StreamHandler(sys.stdout)
     sh.setFormatter(formatter)
     sh.setLevel(level)
     handlers.append(sh)
     logger.addHandler(sh)
-
     return
 
 
-def create_logger(logfile=None, level=logging.NOTSET, log_format=None, log_format_date=None):
+def create_logger(logger=None, MP=False, logfile=None,
+                  level=logging.NOTSET, log_format=None, log_format_date=None):
     """
-    Simple logger that uses configure_logger()
+    Configures and returns a logger with specified settings.
+    Sets up logging based on provided level, format, and output file. Can be
+    used for both `setup_logging` and other components.
+
+    Parameters:
+    - logger (logging.Logger, optional): The logger to configure. If `None`, a new logger
+      is created.
+    - logfile (str, optional): Path to the log file. If `None`, logs to the console.
+    - level (int): Logging level (e.g., `logging.INFO`, `logging.DEBUG`).
+    - log_format (str, optional): Format for log messages (e.g., `'%(asctime)s - %(message)s'`).
+    - log_format_date (str, optional): Date format for logs (e.g., `'%Y-%m-%d %H:%M:%S'`).
+
+    Returns:
+    logging.Logger: The configured logger instance.
+
+    Raises:
+    - ValueError: If the log level or format is invalid.
     """
-    logger = logging.getLogger(__name__)
-    configure_logger(logger, logfile=logfile, level=level,
+
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    configure_logger(logger, MP=MP, logfile=logfile, level=level,
                      log_format=log_format, log_format_date=log_format_date)
     logging.basicConfig(handlers=logger.handlers, level=level)
     logger.propagate = False
+    logger.info(f"Logging Created at level:{level}")
     return logger
+
+
+def logger_has_stdout_handler(logger):
+    """
+    Check whether the given logger has a StreamHandler that
+    writes to sys.stdout.
+    Parameters:
+     logger (logging.Logger): The logger instance to inspect.
+    Returns:
+     bool: True if a StreamHandler writing to sys.stdout is found,
+           False otherwise.
+    """
+    for handler in logger.handlers:
+        if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
+            return True
+    return False
 
 
 def elapsed_time(t1, verb=False):
@@ -504,17 +558,13 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
 
     # Get OBJECT, we will use as fieldname
     if 'FIELD' in header['SCI']:
-        object = str(header['SCI']['FIELD']).strip()
-    elif 'OBJECT' in header['SCI']:
-        object = str(header['SCI']['OBJECT']).strip()
+        field = str(header['SCI']['FIELD']).strip()
     else:
-        raise Exception("ERROR: Cannot provide suitable OBJECT from SCI header")
+        raise Exception("ERROR: Cannot provide suitable FIELD from SCI header")
 
-    # Check for object=None on yearly maps
-    if object == 'None' and obsid.find('yearly') != -1:
-        object = 'yearly'
-        LOGGER.warning(f"Updating field to: {object}")
-        header['SCI']['DATE-END'] = header['SCI']['DATE-BEG']
+    # # Check for object=None on yearly maps
+    # if field == 'None' and obsid.find('yearly') != -1:
+    # #    LOGGER.warning(f"Updating field to: {field}")
 
     # The extension to use for FILETYPE
     filetype_ext = FILETYPE_EXT[filetype]
@@ -557,6 +607,12 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         im_section = OrderedDict()
         h_section = OrderedDict()
 
+        # Check if in field extent
+        if get_uniform_coverage and not in_uniform_coverage(ra[k], dec[k], field):
+            LOGGER.warning(f"position:{k} (RA,DEC):{ra[k]},{dec[k]} outside field: {field}")
+            rejected_ids.append(objID[k])
+            continue
+
         # Define the geometry of the thumbnail
         x0, y0 = wcs.wcs_world2pix(ra[k], dec[k], 0)
         x0 = round(float(x0))
@@ -570,16 +626,10 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         x1 = x0-dx
         x2 = x0+dx
 
-        # Check if in field extent
-        if get_uniform_coverage and not in_uniform_coverage(ra[k], dec[k], object):
-            LOGGER.debug(f"WARNING: object:{k} (RA,DEC):{ra[k]},{dec[k]} outside field extent")
-            rejected_ids.append(objID[k])
-            continue
-
         # Make sure the (x0,y0) is contained within the image
         if x0 < 0 or y0 < 0 or x0 > NAXIS1 or y0 > NAXIS2:
-            LOGGER.debug(f"WARNING object:{k} (RA,DEC):{ra[k]},{dec[k]} outside {filename}")
-            LOGGER.debug(f"WARNING object:{k} (x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
+            LOGGER.warning(f"position:{k} (RA,DEC):{ra[k]},{dec[k]} outside {filename}")
+            LOGGER.warning(f"position:{k} (x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
             rejected_ids.append(objID[k])
             continue
 
@@ -594,7 +644,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         if x2 > NAXIS1:
             x2 = NAXIS1
 
-        LOGGER.debug(f"Working on object:{k} -- {objID[k]}")
+        LOGGER.debug(f"Working on position:{k} -- {objID[k]}")
         LOGGER.debug(f"Defined stamp naxis1,naxis2: {naxis1},{naxis2}")
         LOGGER.debug(f"Defined stamp x1,x2: {x1},{x2}")
         LOGGER.debug(f"Defined stamp y1,y2: {y1},{y2}")
@@ -609,9 +659,9 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
                 if data_WGT != 0.0:
                     data_SCI = float(ifits[HDU_SCI][int(y0), int(x0)][0][0])
                 else:
-                    LOGGER.debug(f"(RA,DEC):{ra[k]},{dec[k]} zero flux weight: {data_WGT}")
-                    # rejected_ids.append(objID[k])
-                    # continue
+                    LOGGER.warning(f"position:{k} (RA,DEC):{ra[k]},{dec[k]} has zero flux weight: {data_WGT}")
+                    rejected_ids.append(objID[k])
+                    continue
             except Exception as e:
                 logger.error(e)
                 data_SCI = float("NaN")
@@ -662,7 +712,6 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
                 cutout_names[objID[k]] = {}
             if band not in cutout_names[objID[k]].keys():
                 cutout_names[objID[k]][band] = []
-            # cutout_names[objID[k]][band].append(outname.replace(f"{outdir}/", ''))
             cutout_names[objID[k]][band].append(outname)
 
         # Write out the file
@@ -671,7 +720,7 @@ def fitscutter(filename, ra, dec, cutout_names, rejected_names, lightcurve,
         for EXTNAME in extnames:
             ofits.write(im_section[EXTNAME], extname=EXTNAME, header=h_section[EXTNAME])
         ofits.close()
-        logger.debug(f"Done writing object:{k} to {outname}: {elapsed_time(t0)}")
+        logger.debug(f"Done writing position:{k} to {outname}: {elapsed_time(t0)}")
 
     ifits.close()
     logger.info(f"Done filename: {filename} in {elapsed_time(t1)} -- {counter}")
@@ -1005,9 +1054,8 @@ def in_uniform_coverage(ra, dec, field):
         in_field = False
 
     LOGGER.debug(f"crossRA0: {crossRA0}")
-    LOGGER.debug(f"RA:{ra}, DEC:{dec}")
-    LOGGER.debug(f"range: {ra_range},{dec_range}")
-    LOGGER.debug(f"in_field:{in_field}")
+    LOGGER.debug(f"field:{field}, (ra/dec) range: {ra_range},{dec_range}")
+    LOGGER.debug(f"RA:{ra}, DEC:{dec} in_field:{field} -- {in_field}")
 
     return in_field
 

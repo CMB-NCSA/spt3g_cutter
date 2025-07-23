@@ -11,6 +11,7 @@ import spt3g_cutter.cutterlib as cutterlib
 import os
 import psutil
 import copy
+import pandas as pd
 
 
 def cmdline():
@@ -128,11 +129,18 @@ def cmdline():
 
 def run(args):
 
+    # Get the number of processors to use
+    NP = cutterlib.get_NP(args.np)
+    if NP > 1:
+        MP = True
+    else:
+        MP = False
+
     # Create logger
-    cutterlib.create_logger(level=args.loglevel,
+    logger = logging.getLogger(__name__)
+    cutterlib.create_logger(logger, level=args.loglevel, MP=MP,
                             log_format=args.log_format,
                             log_format_date=args.log_format_date)
-    logger = logging.getLogger(__name__)
 
     logger.info(f"Received command call:\n{' '.join(sys.argv[0:-1])}")
     logger.info(f"Running spt3g_cutter:{spt3g_cutter.__version__}")
@@ -160,14 +168,12 @@ def run(args):
                                  date_end=args.date_end,
                                  yearly=args.yearly)
     logger.info(f"Running query: {query}")
-    rec = fitsfinder.query2rec(query, dbhandle)
+    rec = pd.read_sql_query(query, dbhandle)
 
     cutout_names = {}
     rejected_names = {}
     lightcurve = {}
 
-    # Get the number of processors to use
-    NP = cutterlib.get_NP(args.np)
     if NP > 1:
         p = mp.Pool(processes=NP)
         logger.info(f"Will use {NP} processors for process")
@@ -189,10 +195,12 @@ def run(args):
     args.files = rec['FILE'].tolist()
     Nfiles = len(args.files)
     logger.info(f"Found {Nfiles} files")
-    k = 1
+    k = 0
     t0 = time.time()
+    # Loop over the rec Pandas DF with all files
     for file in args.files:
-        counter = f"{k}/{Nfiles} files"
+        # The counetr we pass on
+        counter = f"{k+1}/{Nfiles} files"
 
         # Make a copy of objID if not None:
         if args.objID is None:

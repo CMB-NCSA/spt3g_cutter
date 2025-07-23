@@ -37,7 +37,7 @@ def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=N
     """Format query template"""
 
     query_files_template = """
-    select ID, FILEPATH || '/' || FILENAME as FILE, BAND, DATE_BEG from {tablename}
+    select ID, FILEPATH || '/' || FILENAME as FILE, BAND, DATE_BEG, FIELD from {tablename}
       {where}
        {and_bands}
        {and_dates}
@@ -93,24 +93,3 @@ def connect_db(dbname):
     # SQLlite DB lives in a file, we do a read-only connection
     con = sqlite3.connect(f'file:{dbname}?mode=ro', uri=True)
     return con
-
-
-def query2rec(query, dbhandle):
-    """
-    Queries DB and returns results as a numpy recarray.
-    """
-    # Get the cursor from the DB handle
-    cur = dbhandle.cursor()
-    # Execute
-    cur.execute(query)
-    tuples = cur.fetchall()
-
-    # Return rec array
-    if tuples:
-        names = [d[0] for d in cur.description]
-        return numpy.rec.array(tuples, names=names)
-    else:
-        logger.error("# DB Query in query2rec() returned no results")
-        msg = f"# Error with query:{query}"
-        raise RuntimeError(msg)
-    return False
